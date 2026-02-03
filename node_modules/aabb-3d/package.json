@@ -1,0 +1,36 @@
+{
+  "name": "aabb-3d",
+  "version": "0.3.0",
+  "description": "3d axis aligned bounding boxes",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc --project ./tsconfig.build.json",
+    "dev": "tsc --watch",
+    "test": "tsx --test ./test/index.test.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/chrisdickinson/aabb-3d"
+  },
+  "keywords": [
+    "aabb",
+    "axis",
+    "aligned",
+    "bounding",
+    "boxes",
+    "3d"
+  ],
+  "author": "Chris Dickinson <chris@neversaw.us>",
+  "license": "MIT",
+  "dependencies": {
+    "gl-matrix": "^3.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.13",
+    "tsx": "^4.11.0",
+    "typescript": "^5.4.5"
+  },
+  "sideEffects": false
+}

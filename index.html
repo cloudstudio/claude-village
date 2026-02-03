@@ -1,0 +1,2540 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent Village</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { overflow: hidden; font-family: 'Segoe UI', system-ui, sans-serif; }
+
+        #info {
+            position: fixed; top: 20px; left: 20px;
+            color: white; background: rgba(0,0,0,0.7);
+            padding: 15px 20px; border-radius: 12px;
+            font-size: 14px; z-index: 100;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        #info h1 { font-size: 20px; margin-bottom: 5px; }
+        #info p { opacity: 0.7; font-size: 12px; }
+
+        #controls {
+            position: fixed; bottom: 20px; left: 50%;
+            transform: translateX(-50%);
+            display: flex; gap: 10px; z-index: 100;
+        }
+        button {
+            background: rgba(255,255,255,0.95); border: none;
+            padding: 14px 24px; border-radius: 12px; cursor: pointer;
+            font-size: 14px; font-weight: 600;
+            transition: all 0.2s;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+        button:hover { transform: translateY(-3px); box-shadow: 0 6px 25px rgba(0,0,0,0.25); }
+        button.active { background: #4ade80; color: white; }
+
+        #stats {
+            position: fixed; top: 20px; right: 20px;
+            color: white; background: rgba(0,0,0,0.7);
+            padding: 15px 20px; border-radius: 12px;
+            font-size: 14px; backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        #stats div { margin: 4px 0; display: flex; justify-content: space-between; gap: 20px; }
+        #stats span { font-weight: 600; color: #4ade80; }
+
+        #agents-panel {
+            position: fixed; bottom: 80px; left: 20px;
+            color: white; background: rgba(0,0,0,0.7);
+            padding: 15px 20px; border-radius: 12px;
+            font-size: 13px; backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1);
+            max-height: 200px; overflow-y: auto;
+            min-width: 220px;
+        }
+        #agents-panel h3 { margin-bottom: 10px; font-size: 14px; }
+        .agent-row {
+            display: flex; align-items: center; gap: 8px;
+            padding: 6px 8px; margin: 4px 0;
+            background: rgba(255,255,255,0.1); border-radius: 6px;
+        }
+        .agent-color { width: 10px; height: 10px; border-radius: 50%; }
+        .agent-name { flex: 1; }
+        .agent-state {
+            font-size: 10px; padding: 2px 6px;
+            border-radius: 4px; text-transform: uppercase;
+        }
+        .agent-state.idle { background: rgba(100,100,100,0.5); }
+        .agent-state.thinking { background: rgba(255,200,0,0.5); }
+        .agent-state.working { background: rgba(0,150,255,0.5); }
+        .agent-state.success { background: rgba(0,200,100,0.5); }
+        .agent-state.error { background: rgba(255,50,50,0.5); }
+
+        #connection {
+            position: fixed; top: 110px; right: 20px;
+            color: white; background: rgba(0,0,0,0.7);
+            padding: 10px 15px; border-radius: 8px;
+            font-size: 12px; backdrop-filter: blur(10px);
+            display: flex; align-items: center; gap: 8px;
+        }
+        .conn-dot { width: 8px; height: 8px; border-radius: 50%; background: #fbbf24; }
+
+        #controls-help {
+            position: fixed; bottom: 80px; right: 20px;
+            color: white; background: rgba(0,0,0,0.7);
+            padding: 10px 15px; border-radius: 8px;
+            font-size: 11px; backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        #controls-help span {
+            background: rgba(255,255,255,0.2);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">
+        <h1>🏘️ Agent Village</h1>
+        <p>Visualizador de Agentes Claude</p>
+    </div>
+
+    <div id="stats">
+        <div>FPS <span id="fpsCount">60</span></div>
+        <div>Casas <span id="houseCount">0</span></div>
+        <div>Agentes <span id="agentCount">0</span></div>
+        <div>Archivos <span id="fileCount">0</span></div>
+        <div>Arboles <span id="treeCount">0</span></div>
+        <div>Animales <span id="animalCount">0</span></div>
+        <div>Flora <span id="floraCount">0</span></div>
+    </div>
+
+    <div id="controls-help">
+        <span>WASD</span> Mover &nbsp; <span>Q/E</span> Altura &nbsp; <span>Mouse</span> Rotar &nbsp; <span>Scroll</span> Zoom
+    </div>
+
+    <div id="connection">
+        <div class="conn-dot"></div>
+        <span>Demo Mode</span>
+    </div>
+
+    <div id="agents-panel">
+        <h3>Agentes Activos</h3>
+        <div id="agents-list"></div>
+    </div>
+
+    <div id="controls">
+        <button onclick="addHouse()">🏠 Casa</button>
+        <button onclick="addAgent()">🤖 Agente</button>
+        <button onclick="addTree()">🌲 Árbol</button>
+        <button id="btn-auto" onclick="toggleAuto()">✨ Auto</button>
+        <button id="btn-drone" onclick="toggleDrone()">🚁 Dron</button>
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+
+        // ==================== SCENE SETUP ====================
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87CEEB);
+        scene.fog = new THREE.FogExp2(0x87CEEB, 0.008);
+
+        const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 500);
+        camera.position.set(30, 25, 30);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.body.appendChild(renderer.domElement);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.maxPolarAngle = Math.PI / 2.1;
+        controls.minDistance = 5;
+        controls.maxDistance = 150;
+        controls.target.set(0, 3, 0);
+
+        // WASD + QE Movement
+        const moveState = { forward: false, backward: false, left: false, right: false, up: false, down: false };
+        const moveSpeed = 0.5;
+        const droneSpeed = 0.3;
+
+        document.addEventListener('keydown', (e) => {
+            switch(e.code) {
+                case 'KeyW': moveState.forward = true; break;
+                case 'KeyS': moveState.backward = true; break;
+                case 'KeyA': moveState.left = true; break;
+                case 'KeyD': moveState.right = true; break;
+                case 'KeyQ': case 'ShiftLeft': moveState.down = true; break;
+                case 'KeyE': case 'Space': moveState.up = true; e.preventDefault(); break;
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            switch(e.code) {
+                case 'KeyW': moveState.forward = false; break;
+                case 'KeyS': moveState.backward = false; break;
+                case 'KeyA': moveState.left = false; break;
+                case 'KeyD': moveState.right = false; break;
+                case 'KeyQ': case 'ShiftLeft': moveState.down = false; break;
+                case 'KeyE': case 'Space': moveState.up = false; break;
+            }
+        });
+
+        // FPS Counter
+        let frameCount = 0;
+        let lastFpsUpdate = performance.now();
+        let currentFps = 60;
+
+        // ==================== DRONE MODE ====================
+        let droneMode = false;
+        let drone = null;
+
+        function createDrone() {
+            const group = new THREE.Group();
+
+            // Drone body (central cube)
+            const body = new THREE.Mesh(
+                new THREE.BoxGeometry(0.6, 0.2, 0.6),
+                new THREE.MeshLambertMaterial({ color: 0x333333 })
+            );
+            body.castShadow = true;
+            group.add(body);
+
+            // Camera lens (front indicator)
+            const lens = new THREE.Mesh(
+                new THREE.BoxGeometry(0.15, 0.1, 0.1),
+                new THREE.MeshLambertMaterial({ color: 0x00aaff })
+            );
+            lens.position.set(0, 0, 0.35);
+            group.add(lens);
+
+            // Arms
+            const armGeo = new THREE.BoxGeometry(0.8, 0.05, 0.08);
+            const armMat = new THREE.MeshLambertMaterial({ color: 0x444444 });
+
+            const arm1 = new THREE.Mesh(armGeo, armMat);
+            arm1.rotation.y = Math.PI / 4;
+            group.add(arm1);
+
+            const arm2 = new THREE.Mesh(armGeo, armMat);
+            arm2.rotation.y = -Math.PI / 4;
+            group.add(arm2);
+
+            // Propellers (4)
+            const propGeo = new THREE.BoxGeometry(0.4, 0.02, 0.08);
+            const propMat = new THREE.MeshLambertMaterial({ color: 0x666666 });
+            const propPositions = [
+                { x: 0.35, z: 0.35 },
+                { x: -0.35, z: 0.35 },
+                { x: 0.35, z: -0.35 },
+                { x: -0.35, z: -0.35 }
+            ];
+
+            const propellers = [];
+            propPositions.forEach(pos => {
+                const prop = new THREE.Mesh(propGeo, propMat);
+                prop.position.set(pos.x, 0.12, pos.z);
+                propellers.push(prop);
+                group.add(prop);
+            });
+
+            // LED lights
+            const ledGeo = new THREE.BoxGeometry(0.06, 0.06, 0.06);
+            const ledGreen = new THREE.Mesh(ledGeo, new THREE.MeshBasicMaterial({ color: 0x00ff00 }));
+            ledGreen.position.set(-0.35, 0, 0.35);
+            group.add(ledGreen);
+
+            const ledRed = new THREE.Mesh(ledGeo, new THREE.MeshBasicMaterial({ color: 0xff0000 }));
+            ledRed.position.set(0.35, 0, 0.35);
+            group.add(ledRed);
+
+            group.position.set(0, 5, 0);
+            group.userData = {
+                propellers,
+                velocityY: 0,
+                targetHeight: 5
+            };
+
+            scene.add(group);
+            return group;
+        }
+
+        window.toggleDrone = function() {
+            droneMode = !droneMode;
+            document.getElementById('btn-drone').classList.toggle('active', droneMode);
+
+            if (droneMode) {
+                if (!drone) {
+                    drone = createDrone();
+                }
+                drone.visible = true;
+                // Position drone at camera target
+                drone.position.set(controls.target.x, 5, controls.target.z);
+            } else {
+                if (drone) drone.visible = false;
+            }
+        };
+
+        // Lighting
+        scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+        const sun = new THREE.DirectionalLight(0xfff5e0, 1.0);
+        sun.position.set(40, 60, 40);
+        sun.castShadow = true;
+        sun.shadow.mapSize.width = 1024;
+        sun.shadow.mapSize.height = 1024;
+        sun.shadow.camera.near = 10;
+        sun.shadow.camera.far = 150;
+        sun.shadow.camera.left = -50;
+        sun.shadow.camera.right = 50;
+        sun.shadow.camera.top = 50;
+        sun.shadow.camera.bottom = -50;
+        scene.add(sun);
+
+        // ==================== MATERIALS ====================
+        const materials = {
+            grass: new THREE.MeshLambertMaterial({ color: 0x5d9b3a }),
+            grassDark: new THREE.MeshLambertMaterial({ color: 0x4a8a2f }),
+            grassLight: new THREE.MeshLambertMaterial({ color: 0x6dab4a }),
+            dirt: new THREE.MeshLambertMaterial({ color: 0x8b6914 }),
+            dirtDark: new THREE.MeshLambertMaterial({ color: 0x6b5410 }),
+            sand: new THREE.MeshLambertMaterial({ color: 0xc2b280 }),
+            wood: new THREE.MeshLambertMaterial({ color: 0x8b5a2b }),
+            woodLight: new THREE.MeshLambertMaterial({ color: 0xc9a66b }),
+            woodBirch: new THREE.MeshLambertMaterial({ color: 0xddd5c0 }),
+            leaves: new THREE.MeshLambertMaterial({ color: 0x2d7d32 }),
+            leavesBright: new THREE.MeshLambertMaterial({ color: 0x4caf50 }),
+            stone: new THREE.MeshLambertMaterial({ color: 0x808080 }),
+            stoneDark: new THREE.MeshLambertMaterial({ color: 0x606060 }),
+            stoneLight: new THREE.MeshLambertMaterial({ color: 0x9a9a9a }),
+            roofRed: new THREE.MeshLambertMaterial({ color: 0xb22222 }),
+            roofBrown: new THREE.MeshLambertMaterial({ color: 0x6d4c2a }),
+            glass: new THREE.MeshLambertMaterial({ color: 0x88ccff, transparent: true, opacity: 0.6 }),
+            doorDark: new THREE.MeshLambertMaterial({ color: 0x4a3520 }),
+            white: new THREE.MeshLambertMaterial({ color: 0xffffff }),
+            skin: new THREE.MeshLambertMaterial({ color: 0xffcc99 }),
+            fileBlock: new THREE.MeshLambertMaterial({ color: 0x4a9eff }),
+            // Flower colors
+            flowerPink: new THREE.MeshLambertMaterial({ color: 0xff69b4 }),
+            flowerYellow: new THREE.MeshLambertMaterial({ color: 0xffd700 }),
+            flowerRed: new THREE.MeshLambertMaterial({ color: 0xff4444 }),
+            flowerPurple: new THREE.MeshLambertMaterial({ color: 0x9932cc }),
+            flowerWhite: new THREE.MeshLambertMaterial({ color: 0xffffff }),
+            flowerOrange: new THREE.MeshLambertMaterial({ color: 0xff8c00 }),
+            flowerStem: new THREE.MeshLambertMaterial({ color: 0x228b22 }),
+            // Mushroom colors
+            mushroomRed: new THREE.MeshLambertMaterial({ color: 0xcc2222 }),
+            mushroomBrown: new THREE.MeshLambertMaterial({ color: 0x8b4513 }),
+            mushroomWhite: new THREE.MeshLambertMaterial({ color: 0xf5f5dc }),
+            mushroomSpots: new THREE.MeshLambertMaterial({ color: 0xffffff }),
+            // Animal colors
+            chickenWhite: new THREE.MeshLambertMaterial({ color: 0xf5f5f5 }),
+            chickenRed: new THREE.MeshLambertMaterial({ color: 0xcc3333 }),
+            chickenYellow: new THREE.MeshLambertMaterial({ color: 0xffa500 }),
+            sheepWhite: new THREE.MeshLambertMaterial({ color: 0xf8f8f8 }),
+            sheepFace: new THREE.MeshLambertMaterial({ color: 0x333333 }),
+            pigPink: new THREE.MeshLambertMaterial({ color: 0xffb6c1 }),
+            pigSnout: new THREE.MeshLambertMaterial({ color: 0xff9999 }),
+            butterflyBlue: new THREE.MeshLambertMaterial({ color: 0x4169e1, side: THREE.DoubleSide }),
+            butterflyOrange: new THREE.MeshLambertMaterial({ color: 0xff8c00, side: THREE.DoubleSide }),
+            birdBrown: new THREE.MeshLambertMaterial({ color: 0x8b4513 }),
+            birdBlue: new THREE.MeshLambertMaterial({ color: 0x4682b4 }),
+            beeYellow: new THREE.MeshLambertMaterial({ color: 0xffd700 }),
+            beeBlack: new THREE.MeshLambertMaterial({ color: 0x222222 }),
+            beeWing: new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 }),
+            // Water
+            water: new THREE.MeshLambertMaterial({ color: 0x4488cc, transparent: true, opacity: 0.7 }),
+            waterDeep: new THREE.MeshLambertMaterial({ color: 0x2266aa }),
+            // Fence
+            fence: new THREE.MeshLambertMaterial({ color: 0x9b7653 }),
+        };
+
+        const agentColors = [
+            0x6C5CE7, 0x00B894, 0xFDAA5E, 0xE17055,
+            0x00CEC9, 0xFF7675, 0xA29BFE, 0x55A3FF
+        ];
+
+        // ==================== PROCEDURAL GRASS TEXTURE ====================
+        function createGrassTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 256;
+            canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+
+            // Base green
+            ctx.fillStyle = '#5d9b3a';
+            ctx.fillRect(0, 0, 256, 256);
+
+            // Add grass variation
+            for (let i = 0; i < 3000; i++) {
+                const x = Math.random() * 256;
+                const y = Math.random() * 256;
+                const shade = Math.random();
+                if (shade < 0.3) {
+                    ctx.fillStyle = '#4a8a2f';
+                } else if (shade < 0.6) {
+                    ctx.fillStyle = '#6dab4a';
+                } else if (shade < 0.8) {
+                    ctx.fillStyle = '#5d9b3a';
+                } else {
+                    ctx.fillStyle = '#7dbb5a';
+                }
+                ctx.fillRect(x, y, 2 + Math.random() * 3, 2 + Math.random() * 3);
+            }
+
+            // Add some darker patches
+            for (let i = 0; i < 20; i++) {
+                const x = Math.random() * 256;
+                const y = Math.random() * 256;
+                const r = 10 + Math.random() * 20;
+                const gradient = ctx.createRadialGradient(x, y, 0, x, y, r);
+                gradient.addColorStop(0, 'rgba(74, 138, 47, 0.3)');
+                gradient.addColorStop(1, 'rgba(74, 138, 47, 0)');
+                ctx.fillStyle = gradient;
+                ctx.fillRect(x - r, y - r, r * 2, r * 2);
+            }
+
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            texture.repeat.set(30, 30);
+            return texture;
+        }
+
+        // ==================== GROUND ====================
+        const grassTexture = createGrassTexture();
+        const ground = new THREE.Mesh(
+            new THREE.PlaneGeometry(300, 300),
+            new THREE.MeshLambertMaterial({ map: grassTexture })
+        );
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        scene.add(ground);
+
+        // ==================== STORAGE ====================
+        const houses = [];
+        const agents = [];
+        const trees = [];
+        const files = [];
+        const flowers = [];
+        const bushes = [];
+        const tallGrass = [];
+        const mushrooms = [];
+        const rocks = [];
+        const animals = [];
+        const insects = [];
+
+        // Agent states
+        const AgentState = {
+            IDLE: 'idle',
+            THINKING: 'thinking',
+            WORKING: 'working',
+            SUCCESS: 'success',
+            ERROR: 'error'
+        };
+
+        // ==================== CLOUDS ====================
+        const cloudGeo = new THREE.BoxGeometry(4, 1.5, 4);
+        const cloudMat = new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0.9 });
+        const cloudCount = 30;
+        const cloudMesh = new THREE.InstancedMesh(cloudGeo, cloudMat, cloudCount);
+        const cloudData = [];
+        const dummy = new THREE.Object3D();
+
+        for (let i = 0; i < cloudCount; i++) {
+            const x = (Math.random() - 0.5) * 200;
+            const y = 25 + Math.random() * 15;
+            const z = (Math.random() - 0.5) * 200;
+            const scale = 0.5 + Math.random() * 1;
+            cloudData.push({ x, y, z, scale, speed: 0.02 + Math.random() * 0.03 });
+            dummy.position.set(x, y, z);
+            dummy.scale.set(scale, scale * 0.5, scale);
+            dummy.updateMatrix();
+            cloudMesh.setMatrixAt(i, dummy.matrix);
+        }
+        cloudMesh.instanceMatrix.needsUpdate = true;
+        scene.add(cloudMesh);
+
+        // ==================== AMBIENT PARTICLES (Pollen/Dust) ====================
+        const pollenCount = 150;
+        const pollenGeo = new THREE.BufferGeometry();
+        const pollenPositions = new Float32Array(pollenCount * 3);
+        const pollenData = [];
+
+        for (let i = 0; i < pollenCount; i++) {
+            const x = (Math.random() - 0.5) * 100;
+            const y = 1 + Math.random() * 8;
+            const z = (Math.random() - 0.5) * 100;
+            pollenPositions[i * 3] = x;
+            pollenPositions[i * 3 + 1] = y;
+            pollenPositions[i * 3 + 2] = z;
+            pollenData.push({
+                speed: 0.002 + Math.random() * 0.003,
+                drift: Math.random() * Math.PI * 2,
+                driftSpeed: 0.01 + Math.random() * 0.02
+            });
+        }
+
+        pollenGeo.setAttribute('position', new THREE.BufferAttribute(pollenPositions, 3));
+        const pollenMat = new THREE.PointsMaterial({
+            color: 0xffffcc,
+            size: 0.08,
+            transparent: true,
+            opacity: 0.6
+        });
+        const pollenMesh = new THREE.Points(pollenGeo, pollenMat);
+        scene.add(pollenMesh);
+
+        // ==================== FALLING LEAVES ====================
+        const leafCount = 40;
+        const leafGeo = new THREE.BoxGeometry(0.15, 0.02, 0.1);
+        const leafColors = [0x8b4513, 0xd2691e, 0xcd853f, 0x228b22, 0x32cd32];
+        const leafMeshes = [];
+        const leafDataArr = [];
+
+        for (let i = 0; i < leafCount; i++) {
+            const color = leafColors[Math.floor(Math.random() * leafColors.length)];
+            const leaf = new THREE.Mesh(leafGeo, new THREE.MeshLambertMaterial({ color }));
+            leaf.position.set(
+                (Math.random() - 0.5) * 80,
+                15 + Math.random() * 20,
+                (Math.random() - 0.5) * 80
+            );
+            leaf.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+            scene.add(leaf);
+            leafMeshes.push(leaf);
+            leafDataArr.push({
+                fallSpeed: 0.5 + Math.random() * 0.5,
+                swayPhase: Math.random() * Math.PI * 2,
+                swaySpeed: 1 + Math.random() * 2,
+                spinSpeed: 0.5 + Math.random() * 1.5,
+                driftX: (Math.random() - 0.5) * 0.02,
+                driftZ: (Math.random() - 0.5) * 0.02
+            });
+        }
+
+        // ==================== PARTICLE SYSTEM ====================
+        class ParticleSystem {
+            constructor(count, color, size = 0.1) {
+                const geometry = new THREE.BufferGeometry();
+                const positions = new Float32Array(count * 3);
+                const velocities = [];
+
+                for (let i = 0; i < count; i++) {
+                    positions[i * 3] = 0;
+                    positions[i * 3 + 1] = 0;
+                    positions[i * 3 + 2] = 0;
+                    velocities.push({ x: 0, y: 0, z: 0, life: 0 });
+                }
+
+                geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+                const material = new THREE.PointsMaterial({
+                    color: color,
+                    size: size,
+                    transparent: true,
+                    opacity: 0.8
+                });
+
+                this.mesh = new THREE.Points(geometry, material);
+                this.velocities = velocities;
+                this.positions = positions;
+                this.active = false;
+                this.emitRate = 0;
+                this.emitTimer = 0;
+                this.basePosition = new THREE.Vector3();
+                scene.add(this.mesh);
+            }
+
+            emit(x, y, z, vx, vy, vz) {
+                for (let i = 0; i < this.velocities.length; i++) {
+                    if (this.velocities[i].life <= 0) {
+                        this.positions[i * 3] = x + (Math.random() - 0.5) * 0.3;
+                        this.positions[i * 3 + 1] = y;
+                        this.positions[i * 3 + 2] = z + (Math.random() - 0.5) * 0.3;
+                        this.velocities[i] = {
+                            x: vx + (Math.random() - 0.5) * 0.5,
+                            y: vy + Math.random() * 0.5,
+                            z: vz + (Math.random() - 0.5) * 0.5,
+                            life: 1
+                        };
+                        break;
+                    }
+                }
+            }
+
+            update(dt) {
+                for (let i = 0; i < this.velocities.length; i++) {
+                    const v = this.velocities[i];
+                    if (v.life > 0) {
+                        this.positions[i * 3] += v.x * dt;
+                        this.positions[i * 3 + 1] += v.y * dt;
+                        this.positions[i * 3 + 2] += v.z * dt;
+                        v.y -= dt * 2; // gravity
+                        v.life -= dt * 1.5;
+                    } else {
+                        this.positions[i * 3 + 1] = -100; // hide
+                    }
+                }
+                this.mesh.geometry.attributes.position.needsUpdate = true;
+
+                if (this.active && this.emitRate > 0) {
+                    this.emitTimer += dt;
+                    while (this.emitTimer > 1 / this.emitRate) {
+                        this.emitTimer -= 1 / this.emitRate;
+                        this.emit(
+                            this.basePosition.x,
+                            this.basePosition.y + 1.8,
+                            this.basePosition.z,
+                            0, 2, 0
+                        );
+                    }
+                }
+            }
+
+            start(x, y, z, rate) {
+                this.basePosition.set(x, y, z);
+                this.emitRate = rate;
+                this.active = true;
+            }
+
+            stop() {
+                this.active = false;
+                this.emitRate = 0;
+            }
+        }
+
+        // ==================== ZONE DEFINITIONS ====================
+        // Farm/Corral zone (where animals and dirt will be)
+        const farmZone = {
+            minX: -18, maxX: 18,
+            minZ: -12, maxZ: 12
+        };
+
+        // Village zone (where houses will be placed)
+        const villageRadius = 50;
+
+        // Occupied positions tracker (for collision avoidance)
+        const occupiedPositions = [];
+
+        function isPositionFree(x, z, radius, excludeFarm = false) {
+            // Check if inside farm when we don't want that
+            if (excludeFarm && x > farmZone.minX && x < farmZone.maxX && z > farmZone.minZ && z < farmZone.maxZ) {
+                return false;
+            }
+            // Check against occupied positions
+            for (const pos of occupiedPositions) {
+                const dx = pos.x - x;
+                const dz = pos.z - z;
+                const minDist = radius + pos.radius;
+                if (dx * dx + dz * dz < minDist * minDist) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        function registerPosition(x, z, radius) {
+            occupiedPositions.push({ x, z, radius });
+        }
+
+        function getRandomPositionInFarm(radius = 1) {
+            for (let attempts = 0; attempts < 50; attempts++) {
+                const x = farmZone.minX + 2 + Math.random() * (farmZone.maxX - farmZone.minX - 4);
+                const z = farmZone.minZ + 2 + Math.random() * (farmZone.maxZ - farmZone.minZ - 4);
+                if (isPositionFree(x, z, radius)) {
+                    return { x, z };
+                }
+            }
+            // Fallback
+            return {
+                x: farmZone.minX + 2 + Math.random() * (farmZone.maxX - farmZone.minX - 4),
+                z: farmZone.minZ + 2 + Math.random() * (farmZone.maxZ - farmZone.minZ - 4)
+            };
+        }
+
+        function getRandomPositionOutsideFarm(minDist, maxDist, radius = 1) {
+            for (let attempts = 0; attempts < 100; attempts++) {
+                const angle = Math.random() * Math.PI * 2;
+                const dist = minDist + Math.random() * (maxDist - minDist);
+                const x = Math.cos(angle) * dist;
+                const z = Math.sin(angle) * dist;
+                if (isPositionFree(x, z, radius, true)) {
+                    return { x, z };
+                }
+            }
+            // Fallback
+            const angle = Math.random() * Math.PI * 2;
+            const dist = minDist + Math.random() * (maxDist - minDist);
+            return { x: Math.cos(angle) * dist, z: Math.sin(angle) * dist };
+        }
+
+        // ==================== SMALL STONES (InstancedMesh) ====================
+        const stoneCount = 150;
+        const stoneGeo = new THREE.BoxGeometry(0.3, 0.2, 0.3);
+        const stoneMesh = new THREE.InstancedMesh(stoneGeo, materials.stone, stoneCount);
+        stoneMesh.castShadow = true;
+        stoneMesh.receiveShadow = true;
+
+        for (let i = 0; i < stoneCount; i++) {
+            // Stones can be anywhere but spread more evenly
+            const pos = getRandomPositionOutsideFarm(25, 80, 0.5);
+            const scale = 0.5 + Math.random() * 1;
+
+            dummy.position.set(pos.x, 0.1 * scale, pos.z);
+            dummy.rotation.set(0, Math.random() * Math.PI, 0);
+            dummy.scale.set(scale, scale * (0.5 + Math.random() * 0.5), scale);
+            dummy.updateMatrix();
+            stoneMesh.setMatrixAt(i, dummy.matrix);
+        }
+        stoneMesh.instanceMatrix.needsUpdate = true;
+        scene.add(stoneMesh);
+
+        // ==================== DIRT PATCHES (ONLY INSIDE FARM) ====================
+        const dirtPatchCount = 12;
+        for (let i = 0; i < dirtPatchCount; i++) {
+            const pos = getRandomPositionInFarm(3);
+            const size = 1.5 + Math.random() * 2.5;
+
+            const patch = new THREE.Mesh(
+                new THREE.CircleGeometry(size, 8),
+                Math.random() > 0.5 ? materials.dirt : materials.dirtDark
+            );
+            patch.rotation.x = -Math.PI / 2;
+            patch.position.set(pos.x, 0.01, pos.z);
+            patch.receiveShadow = true;
+            scene.add(patch);
+        }
+
+        // ==================== FLOWERS ====================
+        function createFlower(x, z, type = 0) {
+            const group = new THREE.Group();
+            const stemHeight = 0.3 + Math.random() * 0.3;
+
+            // Stem
+            const stem = new THREE.Mesh(
+                new THREE.BoxGeometry(0.05, stemHeight, 0.05),
+                materials.flowerStem
+            );
+            stem.position.y = stemHeight / 2;
+            group.add(stem);
+
+            const flowerColors = [materials.flowerPink, materials.flowerYellow, materials.flowerRed, materials.flowerPurple, materials.flowerWhite, materials.flowerOrange];
+            const color = flowerColors[type % flowerColors.length];
+
+            switch (type % 5) {
+                case 0: // Rose-like (round petals)
+                    for (let i = 0; i < 5; i++) {
+                        const petal = new THREE.Mesh(
+                            new THREE.BoxGeometry(0.12, 0.02, 0.08),
+                            color
+                        );
+                        petal.position.y = stemHeight + 0.05;
+                        petal.rotation.y = (i / 5) * Math.PI * 2;
+                        petal.position.x = Math.cos(petal.rotation.y) * 0.08;
+                        petal.position.z = Math.sin(petal.rotation.y) * 0.08;
+                        group.add(petal);
+                    }
+                    break;
+                case 1: // Daisy (flat with center)
+                    for (let i = 0; i < 8; i++) {
+                        const petal = new THREE.Mesh(
+                            new THREE.BoxGeometry(0.1, 0.02, 0.04),
+                            color
+                        );
+                        petal.position.y = stemHeight + 0.02;
+                        const angle = (i / 8) * Math.PI * 2;
+                        petal.rotation.y = angle;
+                        petal.position.x = Math.cos(angle) * 0.1;
+                        petal.position.z = Math.sin(angle) * 0.1;
+                        group.add(petal);
+                    }
+                    // Yellow center
+                    const center = new THREE.Mesh(
+                        new THREE.BoxGeometry(0.1, 0.05, 0.1),
+                        materials.flowerYellow
+                    );
+                    center.position.y = stemHeight + 0.03;
+                    group.add(center);
+                    break;
+                case 2: // Tulip
+                    const tulipPetal = new THREE.Mesh(
+                        new THREE.BoxGeometry(0.15, 0.2, 0.15),
+                        color
+                    );
+                    tulipPetal.position.y = stemHeight + 0.1;
+                    group.add(tulipPetal);
+                    break;
+                case 3: // Small clustered
+                    for (let i = 0; i < 4; i++) {
+                        const small = new THREE.Mesh(
+                            new THREE.BoxGeometry(0.06, 0.06, 0.06),
+                            color
+                        );
+                        small.position.y = stemHeight + 0.03;
+                        small.position.x = (Math.random() - 0.5) * 0.1;
+                        small.position.z = (Math.random() - 0.5) * 0.1;
+                        group.add(small);
+                    }
+                    break;
+                case 4: // Dandelion (fluffy)
+                    const fluff = new THREE.Mesh(
+                        new THREE.SphereGeometry(0.1, 8, 8),
+                        materials.flowerWhite
+                    );
+                    fluff.position.y = stemHeight + 0.1;
+                    group.add(fluff);
+                    break;
+            }
+
+            group.position.set(x, 0, z);
+            group.rotation.y = Math.random() * Math.PI * 2;
+            scene.add(group);
+            flowers.push(group);
+            return group;
+        }
+
+        // ==================== BUSHES ====================
+        function createBush(x, z) {
+            const group = new THREE.Group();
+            const size = 0.5 + Math.random() * 0.5;
+
+            // Main bush body (3-4 overlapping cubes for roundness)
+            for (let i = 0; i < 4; i++) {
+                const s = size * (0.7 + Math.random() * 0.3);
+                const bush = new THREE.Mesh(
+                    new THREE.BoxGeometry(s, s * 0.8, s),
+                    Math.random() > 0.5 ? materials.leaves : materials.leavesBright
+                );
+                bush.position.set(
+                    (Math.random() - 0.5) * size * 0.4,
+                    s * 0.4,
+                    (Math.random() - 0.5) * size * 0.4
+                );
+                bush.castShadow = true;
+                group.add(bush);
+            }
+
+            // Maybe add berries
+            if (Math.random() > 0.6) {
+                for (let i = 0; i < 5; i++) {
+                    const berry = new THREE.Mesh(
+                        new THREE.BoxGeometry(0.08, 0.08, 0.08),
+                        materials.flowerRed
+                    );
+                    berry.position.set(
+                        (Math.random() - 0.5) * size,
+                        size * 0.5 + Math.random() * 0.2,
+                        (Math.random() - 0.5) * size
+                    );
+                    group.add(berry);
+                }
+            }
+
+            group.position.set(x, 0, z);
+            scene.add(group);
+            bushes.push(group);
+            return group;
+        }
+
+        // ==================== TALL GRASS ====================
+        function createTallGrass(x, z) {
+            const group = new THREE.Group();
+            const bladeCount = 3 + Math.floor(Math.random() * 4);
+
+            for (let i = 0; i < bladeCount; i++) {
+                const height = 0.4 + Math.random() * 0.4;
+                const blade = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.05, height, 0.02),
+                    Math.random() > 0.5 ? materials.grassLight : materials.grass
+                );
+                blade.position.set(
+                    (Math.random() - 0.5) * 0.3,
+                    height / 2,
+                    (Math.random() - 0.5) * 0.3
+                );
+                blade.rotation.z = (Math.random() - 0.5) * 0.3;
+                blade.userData.originalRotation = blade.rotation.z;
+                blade.userData.phase = Math.random() * Math.PI * 2;
+                group.add(blade);
+            }
+
+            group.position.set(x, 0, z);
+            scene.add(group);
+            tallGrass.push(group);
+            return group;
+        }
+
+        // ==================== MUSHROOMS ====================
+        function createMushroom(x, z, type = 0) {
+            const group = new THREE.Group();
+            const scale = 0.5 + Math.random() * 0.5;
+
+            // Stem
+            const stem = new THREE.Mesh(
+                new THREE.BoxGeometry(0.15 * scale, 0.25 * scale, 0.15 * scale),
+                materials.mushroomWhite
+            );
+            stem.position.y = 0.125 * scale;
+            group.add(stem);
+
+            if (type === 0) {
+                // Red with white spots (Amanita style)
+                const cap = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.35 * scale, 0.15 * scale, 0.35 * scale),
+                    materials.mushroomRed
+                );
+                cap.position.y = 0.3 * scale;
+                group.add(cap);
+
+                // White spots
+                for (let i = 0; i < 4; i++) {
+                    const spot = new THREE.Mesh(
+                        new THREE.BoxGeometry(0.06 * scale, 0.02, 0.06 * scale),
+                        materials.mushroomSpots
+                    );
+                    spot.position.y = 0.38 * scale;
+                    spot.position.x = (Math.random() - 0.5) * 0.2 * scale;
+                    spot.position.z = (Math.random() - 0.5) * 0.2 * scale;
+                    group.add(spot);
+                }
+            } else {
+                // Brown mushroom
+                const cap = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.3 * scale, 0.12 * scale, 0.3 * scale),
+                    materials.mushroomBrown
+                );
+                cap.position.y = 0.28 * scale;
+                group.add(cap);
+            }
+
+            group.position.set(x, 0, z);
+            scene.add(group);
+            mushrooms.push(group);
+            return group;
+        }
+
+        // ==================== LARGER ROCKS ====================
+        function createRock(x, z) {
+            const group = new THREE.Group();
+            const baseSize = 0.5 + Math.random() * 1;
+
+            // Multiple cubes for rocky appearance
+            for (let i = 0; i < 3; i++) {
+                const s = baseSize * (0.5 + Math.random() * 0.5);
+                const rock = new THREE.Mesh(
+                    new THREE.BoxGeometry(s, s * 0.6, s * 0.8),
+                    [materials.stone, materials.stoneDark, materials.stoneLight][Math.floor(Math.random() * 3)]
+                );
+                rock.position.set(
+                    (Math.random() - 0.5) * baseSize * 0.3,
+                    s * 0.3,
+                    (Math.random() - 0.5) * baseSize * 0.3
+                );
+                rock.rotation.y = Math.random() * Math.PI;
+                rock.castShadow = true;
+                rock.receiveShadow = true;
+                group.add(rock);
+            }
+
+            group.position.set(x, 0, z);
+            scene.add(group);
+            rocks.push(group);
+            return group;
+        }
+
+        // ==================== ANIMALS ====================
+
+        // Chicken
+        function createChicken(x, z) {
+            const group = new THREE.Group();
+
+            // Body
+            const body = new THREE.Mesh(
+                new THREE.BoxGeometry(0.4, 0.3, 0.5),
+                materials.chickenWhite
+            );
+            body.position.y = 0.35;
+            group.add(body);
+
+            // Head
+            const head = new THREE.Mesh(
+                new THREE.BoxGeometry(0.2, 0.2, 0.2),
+                materials.chickenWhite
+            );
+            head.position.set(0, 0.55, 0.25);
+            group.add(head);
+
+            // Comb (red thing on head)
+            const comb = new THREE.Mesh(
+                new THREE.BoxGeometry(0.05, 0.1, 0.15),
+                materials.chickenRed
+            );
+            comb.position.set(0, 0.7, 0.25);
+            group.add(comb);
+
+            // Wattle (red under beak)
+            const wattle = new THREE.Mesh(
+                new THREE.BoxGeometry(0.04, 0.08, 0.04),
+                materials.chickenRed
+            );
+            wattle.position.set(0, 0.48, 0.35);
+            group.add(wattle);
+
+            // Beak
+            const beak = new THREE.Mesh(
+                new THREE.BoxGeometry(0.08, 0.05, 0.1),
+                materials.chickenYellow
+            );
+            beak.position.set(0, 0.54, 0.38);
+            group.add(beak);
+
+            // Eyes
+            const eyeGeo = new THREE.BoxGeometry(0.04, 0.04, 0.02);
+            const eye1 = new THREE.Mesh(eyeGeo, materials.beeBlack);
+            eye1.position.set(-0.08, 0.58, 0.31);
+            group.add(eye1);
+            const eye2 = new THREE.Mesh(eyeGeo, materials.beeBlack);
+            eye2.position.set(0.08, 0.58, 0.31);
+            group.add(eye2);
+
+            // Legs
+            const legGeo = new THREE.BoxGeometry(0.04, 0.15, 0.04);
+            const leg1 = new THREE.Mesh(legGeo, materials.chickenYellow);
+            leg1.position.set(-0.1, 0.12, 0);
+            group.add(leg1);
+            const leg2 = new THREE.Mesh(legGeo, materials.chickenYellow);
+            leg2.position.set(0.1, 0.12, 0);
+            group.add(leg2);
+
+            // Tail
+            const tail = new THREE.Mesh(
+                new THREE.BoxGeometry(0.1, 0.2, 0.1),
+                materials.chickenWhite
+            );
+            tail.position.set(0, 0.45, -0.25);
+            tail.rotation.x = -0.3;
+            group.add(tail);
+
+            group.position.set(x, 0, z);
+            group.userData = {
+                type: 'chicken',
+                state: 'idle',
+                stateTimer: 0,
+                targetX: x,
+                targetZ: z,
+                speed: 0.02 + Math.random() * 0.01,
+                legs: [leg1, leg2],
+                head: head,
+                walkCycle: 0,
+                homeX: x,
+                homeZ: z,
+                confined: true // Keep in farm
+            };
+
+            scene.add(group);
+            animals.push(group);
+            return group;
+        }
+
+        // Sheep
+        function createSheep(x, z) {
+            const group = new THREE.Group();
+
+            // Body (fluffy - multiple cubes)
+            const bodyBase = new THREE.Mesh(
+                new THREE.BoxGeometry(0.8, 0.6, 1),
+                materials.sheepWhite
+            );
+            bodyBase.position.y = 0.5;
+            group.add(bodyBase);
+
+            // Fluffy additions
+            for (let i = 0; i < 5; i++) {
+                const fluff = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.3, 0.2, 0.3),
+                    materials.sheepWhite
+                );
+                fluff.position.set(
+                    (Math.random() - 0.5) * 0.5,
+                    0.7 + Math.random() * 0.1,
+                    (Math.random() - 0.5) * 0.7
+                );
+                group.add(fluff);
+            }
+
+            // Head (dark)
+            const head = new THREE.Mesh(
+                new THREE.BoxGeometry(0.3, 0.3, 0.35),
+                materials.sheepFace
+            );
+            head.position.set(0, 0.6, 0.6);
+            group.add(head);
+
+            // Eyes
+            const eyeGeo = new THREE.BoxGeometry(0.05, 0.05, 0.02);
+            const eye1 = new THREE.Mesh(eyeGeo, materials.white);
+            eye1.position.set(-0.1, 0.65, 0.78);
+            group.add(eye1);
+            const eye2 = new THREE.Mesh(eyeGeo, materials.white);
+            eye2.position.set(0.1, 0.65, 0.78);
+            group.add(eye2);
+
+            // Ears
+            const earGeo = new THREE.BoxGeometry(0.15, 0.08, 0.05);
+            const ear1 = new THREE.Mesh(earGeo, materials.sheepFace);
+            ear1.position.set(-0.22, 0.65, 0.55);
+            group.add(ear1);
+            const ear2 = new THREE.Mesh(earGeo, materials.sheepFace);
+            ear2.position.set(0.22, 0.65, 0.55);
+            group.add(ear2);
+
+            // Legs (dark)
+            const legGeo = new THREE.BoxGeometry(0.12, 0.3, 0.12);
+            const leg1 = new THREE.Mesh(legGeo, materials.sheepFace);
+            leg1.position.set(-0.25, 0.15, 0.3);
+            group.add(leg1);
+            const leg2 = new THREE.Mesh(legGeo, materials.sheepFace);
+            leg2.position.set(0.25, 0.15, 0.3);
+            group.add(leg2);
+            const leg3 = new THREE.Mesh(legGeo, materials.sheepFace);
+            leg3.position.set(-0.25, 0.15, -0.3);
+            group.add(leg3);
+            const leg4 = new THREE.Mesh(legGeo, materials.sheepFace);
+            leg4.position.set(0.25, 0.15, -0.3);
+            group.add(leg4);
+
+            group.position.set(x, 0, z);
+            group.userData = {
+                type: 'sheep',
+                state: 'idle',
+                stateTimer: 0,
+                targetX: x,
+                targetZ: z,
+                speed: 0.015 + Math.random() * 0.01,
+                legs: [leg1, leg2, leg3, leg4],
+                head: head,
+                walkCycle: 0,
+                homeX: x,
+                homeZ: z,
+                confined: true // Keep in farm
+            };
+
+            scene.add(group);
+            animals.push(group);
+            return group;
+        }
+
+        // Pig
+        function createPig(x, z) {
+            const group = new THREE.Group();
+
+            // Body
+            const body = new THREE.Mesh(
+                new THREE.BoxGeometry(0.6, 0.5, 0.9),
+                materials.pigPink
+            );
+            body.position.y = 0.4;
+            group.add(body);
+
+            // Head
+            const head = new THREE.Mesh(
+                new THREE.BoxGeometry(0.4, 0.35, 0.35),
+                materials.pigPink
+            );
+            head.position.set(0, 0.45, 0.55);
+            group.add(head);
+
+            // Snout
+            const snout = new THREE.Mesh(
+                new THREE.BoxGeometry(0.2, 0.15, 0.1),
+                materials.pigSnout
+            );
+            snout.position.set(0, 0.38, 0.75);
+            group.add(snout);
+
+            // Nostrils
+            const nostril1 = new THREE.Mesh(
+                new THREE.BoxGeometry(0.04, 0.04, 0.02),
+                materials.beeBlack
+            );
+            nostril1.position.set(-0.05, 0.38, 0.81);
+            group.add(nostril1);
+            const nostril2 = new THREE.Mesh(
+                new THREE.BoxGeometry(0.04, 0.04, 0.02),
+                materials.beeBlack
+            );
+            nostril2.position.set(0.05, 0.38, 0.81);
+            group.add(nostril2);
+
+            // Eyes
+            const eyeGeo = new THREE.BoxGeometry(0.06, 0.06, 0.02);
+            const eye1 = new THREE.Mesh(eyeGeo, materials.beeBlack);
+            eye1.position.set(-0.12, 0.52, 0.73);
+            group.add(eye1);
+            const eye2 = new THREE.Mesh(eyeGeo, materials.beeBlack);
+            eye2.position.set(0.12, 0.52, 0.73);
+            group.add(eye2);
+
+            // Ears
+            const earGeo = new THREE.BoxGeometry(0.12, 0.12, 0.04);
+            const ear1 = new THREE.Mesh(earGeo, materials.pigPink);
+            ear1.position.set(-0.18, 0.6, 0.45);
+            ear1.rotation.z = -0.3;
+            group.add(ear1);
+            const ear2 = new THREE.Mesh(earGeo, materials.pigPink);
+            ear2.position.set(0.18, 0.6, 0.45);
+            ear2.rotation.z = 0.3;
+            group.add(ear2);
+
+            // Legs (short)
+            const legGeo = new THREE.BoxGeometry(0.12, 0.2, 0.12);
+            const leg1 = new THREE.Mesh(legGeo, materials.pigPink);
+            leg1.position.set(-0.18, 0.1, 0.25);
+            group.add(leg1);
+            const leg2 = new THREE.Mesh(legGeo, materials.pigPink);
+            leg2.position.set(0.18, 0.1, 0.25);
+            group.add(leg2);
+            const leg3 = new THREE.Mesh(legGeo, materials.pigPink);
+            leg3.position.set(-0.18, 0.1, -0.25);
+            group.add(leg3);
+            const leg4 = new THREE.Mesh(legGeo, materials.pigPink);
+            leg4.position.set(0.18, 0.1, -0.25);
+            group.add(leg4);
+
+            // Curly tail
+            const tail = new THREE.Mesh(
+                new THREE.BoxGeometry(0.06, 0.06, 0.15),
+                materials.pigPink
+            );
+            tail.position.set(0, 0.5, -0.5);
+            tail.rotation.x = 0.5;
+            group.add(tail);
+
+            group.position.set(x, 0, z);
+            group.userData = {
+                type: 'pig',
+                state: 'idle',
+                stateTimer: 0,
+                targetX: x,
+                targetZ: z,
+                speed: 0.018 + Math.random() * 0.01,
+                legs: [leg1, leg2, leg3, leg4],
+                head: head,
+                walkCycle: 0,
+                homeX: x,
+                homeZ: z,
+                confined: true // Keep in farm
+            };
+
+            scene.add(group);
+            animals.push(group);
+            return group;
+        }
+
+        // ==================== FLYING CREATURES ====================
+
+        // Butterfly
+        function createButterfly(x, y, z) {
+            const group = new THREE.Group();
+            const colors = [materials.butterflyBlue, materials.butterflyOrange, materials.flowerPurple, materials.flowerPink];
+            const wingColor = colors[Math.floor(Math.random() * colors.length)];
+
+            // Body
+            const body = new THREE.Mesh(
+                new THREE.BoxGeometry(0.04, 0.04, 0.2),
+                materials.beeBlack
+            );
+            group.add(body);
+
+            // Wings (triangles approximated with boxes)
+            const wingGeo = new THREE.BoxGeometry(0.2, 0.01, 0.15);
+            const wing1 = new THREE.Mesh(wingGeo, wingColor);
+            wing1.position.set(-0.12, 0, 0);
+            group.add(wing1);
+            const wing2 = new THREE.Mesh(wingGeo, wingColor);
+            wing2.position.set(0.12, 0, 0);
+            group.add(wing2);
+
+            // Small lower wings
+            const wingGeo2 = new THREE.BoxGeometry(0.12, 0.01, 0.1);
+            const wing3 = new THREE.Mesh(wingGeo2, wingColor);
+            wing3.position.set(-0.08, 0, -0.08);
+            group.add(wing3);
+            const wing4 = new THREE.Mesh(wingGeo2, wingColor);
+            wing4.position.set(0.08, 0, -0.08);
+            group.add(wing4);
+
+            group.position.set(x, y, z);
+            group.userData = {
+                type: 'butterfly',
+                wings: [wing1, wing2, wing3, wing4],
+                phase: Math.random() * Math.PI * 2,
+                targetX: x,
+                targetY: y,
+                targetZ: z,
+                speed: 0.02 + Math.random() * 0.02,
+                homeX: x,
+                homeZ: z,
+                flightTimer: 0
+            };
+
+            scene.add(group);
+            insects.push(group);
+            return group;
+        }
+
+        // Bird
+        function createBird(x, y, z) {
+            const group = new THREE.Group();
+            const bodyColor = Math.random() > 0.5 ? materials.birdBrown : materials.birdBlue;
+
+            // Body
+            const body = new THREE.Mesh(
+                new THREE.BoxGeometry(0.2, 0.15, 0.3),
+                bodyColor
+            );
+            group.add(body);
+
+            // Head
+            const head = new THREE.Mesh(
+                new THREE.BoxGeometry(0.12, 0.12, 0.12),
+                bodyColor
+            );
+            head.position.set(0, 0.05, 0.18);
+            group.add(head);
+
+            // Beak
+            const beak = new THREE.Mesh(
+                new THREE.BoxGeometry(0.04, 0.03, 0.08),
+                materials.chickenYellow
+            );
+            beak.position.set(0, 0.03, 0.28);
+            group.add(beak);
+
+            // Eyes
+            const eye = new THREE.Mesh(
+                new THREE.BoxGeometry(0.03, 0.03, 0.01),
+                materials.beeBlack
+            );
+            eye.position.set(-0.05, 0.07, 0.24);
+            group.add(eye);
+            const eye2 = eye.clone();
+            eye2.position.x = 0.05;
+            group.add(eye2);
+
+            // Wings
+            const wingGeo = new THREE.BoxGeometry(0.25, 0.02, 0.15);
+            const wing1 = new THREE.Mesh(wingGeo, bodyColor);
+            wing1.position.set(-0.18, 0.02, 0);
+            group.add(wing1);
+            const wing2 = new THREE.Mesh(wingGeo, bodyColor);
+            wing2.position.set(0.18, 0.02, 0);
+            group.add(wing2);
+
+            // Tail
+            const tail = new THREE.Mesh(
+                new THREE.BoxGeometry(0.08, 0.02, 0.15),
+                bodyColor
+            );
+            tail.position.set(0, 0, -0.2);
+            group.add(tail);
+
+            group.position.set(x, y, z);
+            group.userData = {
+                type: 'bird',
+                wings: [wing1, wing2],
+                phase: Math.random() * Math.PI * 2,
+                targetX: x,
+                targetY: y,
+                targetZ: z,
+                speed: 0.05 + Math.random() * 0.03,
+                homeX: x,
+                homeZ: z,
+                flightTimer: 0,
+                circleAngle: Math.random() * Math.PI * 2,
+                circleRadius: 5 + Math.random() * 10
+            };
+
+            scene.add(group);
+            insects.push(group);
+            return group;
+        }
+
+        // Bee
+        function createBee(x, y, z) {
+            const group = new THREE.Group();
+
+            // Body (striped)
+            const segment1 = new THREE.Mesh(
+                new THREE.BoxGeometry(0.08, 0.08, 0.06),
+                materials.beeYellow
+            );
+            segment1.position.z = 0.04;
+            group.add(segment1);
+
+            const segment2 = new THREE.Mesh(
+                new THREE.BoxGeometry(0.08, 0.08, 0.04),
+                materials.beeBlack
+            );
+            segment2.position.z = -0.01;
+            group.add(segment2);
+
+            const segment3 = new THREE.Mesh(
+                new THREE.BoxGeometry(0.07, 0.07, 0.04),
+                materials.beeYellow
+            );
+            segment3.position.z = -0.05;
+            group.add(segment3);
+
+            const segment4 = new THREE.Mesh(
+                new THREE.BoxGeometry(0.05, 0.05, 0.03),
+                materials.beeBlack
+            );
+            segment4.position.z = -0.09;
+            group.add(segment4);
+
+            // Wings
+            const wingGeo = new THREE.BoxGeometry(0.12, 0.01, 0.06);
+            const wing1 = new THREE.Mesh(wingGeo, materials.beeWing);
+            wing1.position.set(-0.08, 0.04, 0);
+            group.add(wing1);
+            const wing2 = new THREE.Mesh(wingGeo, materials.beeWing);
+            wing2.position.set(0.08, 0.04, 0);
+            group.add(wing2);
+
+            group.position.set(x, y, z);
+            group.userData = {
+                type: 'bee',
+                wings: [wing1, wing2],
+                phase: Math.random() * Math.PI * 2,
+                targetX: x,
+                targetY: y,
+                targetZ: z,
+                speed: 0.03 + Math.random() * 0.02,
+                homeX: x,
+                homeZ: z,
+                flightTimer: 0,
+                targetFlower: null
+            };
+
+            scene.add(group);
+            insects.push(group);
+            return group;
+        }
+
+        // ==================== POND ====================
+        function createPond(x, z, radius = 6) {
+            const group = new THREE.Group();
+
+            // Water surface
+            const water = new THREE.Mesh(
+                new THREE.CircleGeometry(radius, 16),
+                materials.water
+            );
+            water.rotation.x = -Math.PI / 2;
+            water.position.y = 0.05;
+            water.receiveShadow = true;
+            group.add(water);
+
+            // Deeper center
+            const deepWater = new THREE.Mesh(
+                new THREE.CircleGeometry(radius * 0.6, 12),
+                materials.waterDeep
+            );
+            deepWater.rotation.x = -Math.PI / 2;
+            deepWater.position.y = 0.04;
+            group.add(deepWater);
+
+            // Sand/dirt edge
+            const edge = new THREE.Mesh(
+                new THREE.RingGeometry(radius, radius + 1, 16),
+                materials.sand
+            );
+            edge.rotation.x = -Math.PI / 2;
+            edge.position.y = 0.02;
+            edge.receiveShadow = true;
+            group.add(edge);
+
+            // Some rocks around
+            for (let i = 0; i < 8; i++) {
+                const angle = (i / 8) * Math.PI * 2 + Math.random() * 0.3;
+                const dist = radius + 0.5 + Math.random() * 0.5;
+                const rock = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.4 + Math.random() * 0.3, 0.2 + Math.random() * 0.2, 0.4 + Math.random() * 0.3),
+                    materials.stoneDark
+                );
+                rock.position.set(
+                    Math.cos(angle) * dist,
+                    0.1,
+                    Math.sin(angle) * dist
+                );
+                rock.rotation.y = Math.random() * Math.PI;
+                rock.castShadow = true;
+                group.add(rock);
+            }
+
+            group.position.set(x, 0, z);
+            group.userData = { type: 'pond', radius, waterMesh: water };
+            scene.add(group);
+            return group;
+        }
+
+        // ==================== FENCE ====================
+        function createFence(x1, z1, x2, z2) {
+            const group = new THREE.Group();
+            const dx = x2 - x1;
+            const dz = z2 - z1;
+            const length = Math.sqrt(dx * dx + dz * dz);
+            const angle = Math.atan2(dz, dx);
+            const postCount = Math.ceil(length / 2);
+
+            for (let i = 0; i <= postCount; i++) {
+                const t = i / postCount;
+                const px = x1 + dx * t;
+                const pz = z1 + dz * t;
+
+                // Post
+                const post = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.15, 0.8, 0.15),
+                    materials.fence
+                );
+                post.position.set(px, 0.4, pz);
+                post.castShadow = true;
+                group.add(post);
+            }
+
+            // Rails
+            const railGeo = new THREE.BoxGeometry(length, 0.08, 0.08);
+            const rail1 = new THREE.Mesh(railGeo, materials.fence);
+            rail1.position.set((x1 + x2) / 2, 0.25, (z1 + z2) / 2);
+            rail1.rotation.y = angle;
+            rail1.castShadow = true;
+            group.add(rail1);
+
+            const rail2 = new THREE.Mesh(railGeo, materials.fence);
+            rail2.position.set((x1 + x2) / 2, 0.55, (z1 + z2) / 2);
+            rail2.rotation.y = angle;
+            rail2.castShadow = true;
+            group.add(rail2);
+
+            scene.add(group);
+            return group;
+        }
+
+        // ==================== SPAWN VEGETATION & ANIMALS ====================
+        function spawnVegetation() {
+            // Flowers - OUTSIDE farm, well distributed
+            for (let i = 0; i < 60; i++) {
+                const pos = getRandomPositionOutsideFarm(22, 70, 0.8);
+                registerPosition(pos.x, pos.z, 0.5);
+                createFlower(pos.x, pos.z, Math.floor(Math.random() * 6));
+            }
+
+            // Bushes - OUTSIDE farm
+            for (let i = 0; i < 20; i++) {
+                const pos = getRandomPositionOutsideFarm(25, 65, 1.5);
+                registerPosition(pos.x, pos.z, 1);
+                createBush(pos.x, pos.z);
+            }
+
+            // Tall grass - OUTSIDE farm
+            for (let i = 0; i < 30; i++) {
+                const pos = getRandomPositionOutsideFarm(20, 75, 0.6);
+                registerPosition(pos.x, pos.z, 0.3);
+                createTallGrass(pos.x, pos.z);
+            }
+
+            // Mushrooms - Near trees, OUTSIDE farm
+            for (let i = 0; i < 10; i++) {
+                const pos = getRandomPositionOutsideFarm(28, 55, 0.8);
+                createMushroom(pos.x, pos.z, Math.random() > 0.5 ? 0 : 1);
+            }
+
+            // Larger decorative rocks - OUTSIDE farm
+            for (let i = 0; i < 15; i++) {
+                const pos = getRandomPositionOutsideFarm(30, 70, 2);
+                registerPosition(pos.x, pos.z, 1.5);
+                createRock(pos.x, pos.z);
+            }
+        }
+
+        function spawnAnimals() {
+            // FARM ANIMALS - Only INSIDE the farm zone
+
+            // Chickens (6) - inside farm
+            for (let i = 0; i < 6; i++) {
+                const pos = getRandomPositionInFarm(1);
+                registerPosition(pos.x, pos.z, 0.5);
+                createChicken(pos.x, pos.z);
+            }
+
+            // Sheep (4) - inside farm
+            for (let i = 0; i < 4; i++) {
+                const pos = getRandomPositionInFarm(1.5);
+                registerPosition(pos.x, pos.z, 1);
+                createSheep(pos.x, pos.z);
+            }
+
+            // Pigs (3) - inside farm
+            for (let i = 0; i < 3; i++) {
+                const pos = getRandomPositionInFarm(1.2);
+                registerPosition(pos.x, pos.z, 0.8);
+                createPig(pos.x, pos.z);
+            }
+
+            // FLYING CREATURES - Can be anywhere
+
+            // Butterflies (8) - near flowers, outside farm
+            for (let i = 0; i < 8; i++) {
+                const pos = getRandomPositionOutsideFarm(20, 50, 1);
+                createButterfly(pos.x, 1 + Math.random() * 2, pos.z);
+            }
+
+            // Birds (6) - flying high
+            for (let i = 0; i < 6; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const dist = 15 + Math.random() * 35;
+                createBird(
+                    Math.cos(angle) * dist,
+                    10 + Math.random() * 8,
+                    Math.sin(angle) * dist
+                );
+            }
+
+            // Bees (8) - near flowers
+            for (let i = 0; i < 8; i++) {
+                const pos = getRandomPositionOutsideFarm(22, 45, 1);
+                createBee(pos.x, 0.5 + Math.random() * 1.2, pos.z);
+            }
+        }
+
+        // ==================== HOUSE CREATION ====================
+        function createHouse(x, z) {
+            const geometries = [];
+            const width = 4 + Math.floor(Math.random() * 2);
+            const depth = 4 + Math.floor(Math.random() * 2);
+            const height = 3;
+
+            const wallMat = Math.random() > 0.5 ? materials.woodLight : materials.woodBirch;
+            const roofMat = Math.random() > 0.5 ? materials.roofRed : materials.roofBrown;
+
+            // Floor
+            const floorGeo = new THREE.BoxGeometry(width, 0.3, depth);
+            floorGeo.translate(0, 0.15, 0);
+            geometries.push({ geo: floorGeo, mat: materials.stone });
+
+            // Walls
+            const frontGeo = new THREE.BoxGeometry(width, height, 0.3);
+            frontGeo.translate(0, height/2 + 0.3, depth/2);
+            geometries.push({ geo: frontGeo, mat: wallMat });
+
+            const backGeo = new THREE.BoxGeometry(width, height, 0.3);
+            backGeo.translate(0, height/2 + 0.3, -depth/2);
+            geometries.push({ geo: backGeo, mat: wallMat });
+
+            const leftGeo = new THREE.BoxGeometry(0.3, height, depth);
+            leftGeo.translate(-width/2, height/2 + 0.3, 0);
+            geometries.push({ geo: leftGeo, mat: wallMat });
+
+            const rightGeo = new THREE.BoxGeometry(0.3, height, depth);
+            rightGeo.translate(width/2, height/2 + 0.3, 0);
+            geometries.push({ geo: rightGeo, mat: wallMat });
+
+            // Roof
+            const roofWidth = width + 0.6;
+            const roofGeo1 = new THREE.BoxGeometry(roofWidth/2 + 0.3, 0.3, depth + 1);
+            roofGeo1.translate(-roofWidth/4, 0, 0);
+            roofGeo1.rotateZ(Math.PI/6);
+            roofGeo1.translate(0, height + 1.2, 0);
+            geometries.push({ geo: roofGeo1, mat: roofMat });
+
+            const roofGeo2 = new THREE.BoxGeometry(roofWidth/2 + 0.3, 0.3, depth + 1);
+            roofGeo2.translate(roofWidth/4, 0, 0);
+            roofGeo2.rotateZ(-Math.PI/6);
+            roofGeo2.translate(0, height + 1.2, 0);
+            geometries.push({ geo: roofGeo2, mat: roofMat });
+
+            // Door
+            const doorGeo = new THREE.BoxGeometry(0.8, 1.8, 0.1);
+            doorGeo.translate(0, 1.2, depth/2 + 0.2);
+            geometries.push({ geo: doorGeo, mat: materials.doorDark });
+
+            // Windows
+            const winGeo1 = new THREE.BoxGeometry(0.8, 0.8, 0.15);
+            winGeo1.translate(-width/2 - 0.1, height/2 + 0.5, 0);
+            geometries.push({ geo: winGeo1, mat: materials.glass });
+
+            const winGeo2 = new THREE.BoxGeometry(0.8, 0.8, 0.15);
+            winGeo2.translate(width/2 + 0.1, height/2 + 0.5, 0);
+            geometries.push({ geo: winGeo2, mat: materials.glass });
+
+            // Group by material
+            const byMaterial = new Map();
+            geometries.forEach(({ geo, mat }) => {
+                if (!byMaterial.has(mat)) byMaterial.set(mat, []);
+                byMaterial.get(mat).push(geo);
+            });
+
+            const group = new THREE.Group();
+            byMaterial.forEach((geos, mat) => {
+                const merged = mergeGeometries(geos);
+                const mesh = new THREE.Mesh(merged, mat);
+                mesh.castShadow = true;
+                mesh.receiveShadow = true;
+                group.add(mesh);
+            });
+
+            group.position.set(x, 0, z);
+            group.userData = {
+                x, z, width, depth, height,
+                agents: [],
+                doorPosition: { x: x, y: 0, z: z + depth/2 + 1 }
+            };
+
+            scene.add(group);
+            houses.push(group);
+            return group;
+        }
+
+        // ==================== TREE CREATION ====================
+        function createTree(x, z) {
+            const height = 3 + Math.floor(Math.random() * 3);
+            const leafMat = Math.random() > 0.5 ? materials.leaves : materials.leavesBright;
+            const geometries = [];
+
+            const trunkGeo = new THREE.BoxGeometry(0.6, height, 0.6);
+            trunkGeo.translate(0, height/2, 0);
+            geometries.push({ geo: trunkGeo, mat: materials.wood });
+
+            for (let i = 0; i < 3; i++) {
+                const size = 2.5 - i * 0.5;
+                const leafGeo = new THREE.BoxGeometry(size, 1.2, size);
+                leafGeo.translate(0, height + i * 1, 0);
+                geometries.push({ geo: leafGeo, mat: leafMat });
+            }
+
+            const topGeo = new THREE.BoxGeometry(1, 1, 1);
+            topGeo.translate(0, height + 3, 0);
+            geometries.push({ geo: topGeo, mat: leafMat });
+
+            const byMaterial = new Map();
+            geometries.forEach(({ geo, mat }) => {
+                if (!byMaterial.has(mat)) byMaterial.set(mat, []);
+                byMaterial.get(mat).push(geo);
+            });
+
+            const group = new THREE.Group();
+            byMaterial.forEach((geos, mat) => {
+                const merged = mergeGeometries(geos);
+                const mesh = new THREE.Mesh(merged, mat);
+                mesh.castShadow = true;
+                mesh.receiveShadow = true;
+                group.add(mesh);
+            });
+
+            group.position.set(x, 0, z);
+            scene.add(group);
+            trees.push(group);
+            return group;
+        }
+
+        // ==================== AGENT CREATION ====================
+        function createAgent(house) {
+            const colorHex = agentColors[Math.floor(Math.random() * agentColors.length)];
+            const mat = new THREE.MeshLambertMaterial({ color: colorHex });
+            const legMat = new THREE.MeshLambertMaterial({ color: new THREE.Color(colorHex).multiplyScalar(0.8) });
+
+            const group = new THREE.Group();
+
+            // Body
+            const body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.7, 0.3), mat);
+            body.position.y = 0.85;
+            body.castShadow = true;
+            group.add(body);
+
+            // Head
+            const head = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), materials.skin);
+            head.position.y = 1.4;
+            head.castShadow = true;
+            group.add(head);
+
+            // Hat
+            const hat = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.12, 0.45), mat);
+            hat.position.y = 1.66;
+            group.add(hat);
+
+            // Eyes
+            const eyeGeo = new THREE.BoxGeometry(0.08, 0.08, 0.02);
+            const eye1 = new THREE.Mesh(eyeGeo, materials.white);
+            eye1.position.set(-0.1, 1.45, 0.21);
+            group.add(eye1);
+            const eye2 = new THREE.Mesh(eyeGeo, materials.white);
+            eye2.position.set(0.1, 1.45, 0.21);
+            group.add(eye2);
+
+            // Legs
+            const legGeo = new THREE.BoxGeometry(0.18, 0.5, 0.18);
+            const leg1 = new THREE.Mesh(legGeo, legMat);
+            leg1.position.set(-0.12, 0.25, 0);
+            group.add(leg1);
+            const leg2 = new THREE.Mesh(legGeo, legMat);
+            leg2.position.set(0.12, 0.25, 0);
+            group.add(leg2);
+
+            // Position near house
+            const door = house.userData.doorPosition;
+            group.position.set(door.x, 0, door.z);
+
+            // Agent data
+            const agentId = `agent-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+            group.userData = {
+                id: agentId,
+                name: `Agent ${agents.length + 1}`,
+                house,
+                head,
+                legs: [leg1, leg2],
+                colorHex,
+                state: AgentState.IDLE,
+                currentTask: null,
+                targetX: group.position.x,
+                targetZ: group.position.z,
+                speed: 0.04 + Math.random() * 0.02,
+                moveTimer: Math.random() * 3,
+                walkCycle: 0,
+                bobCycle: 0,
+                stateTimer: 0,
+                particles: {
+                    thinking: new ParticleSystem(30, 0xffdd00, 0.12),
+                    success: new ParticleSystem(50, 0x00ff88, 0.1),
+                    error: new ParticleSystem(40, 0xff4444, 0.1)
+                }
+            };
+
+            scene.add(group);
+            agents.push(group);
+            house.userData.agents.push(group);
+            return group;
+        }
+
+        // ==================== FILE BLOCK CREATION ====================
+        function createFileBlock(house, fileName) {
+            const baseX = house.userData.x + house.userData.width + 1;
+            const baseZ = house.userData.z;
+
+            // Find unoccupied spot
+            let x = baseX, z = baseZ;
+            for (let i = 0; i < files.length; i++) {
+                const f = files[i];
+                if (Math.abs(f.position.x - x) < 1 && Math.abs(f.position.z - z) < 1) {
+                    x += 1.2;
+                    if (x > baseX + 4) { x = baseX; z += 1.2; }
+                }
+            }
+
+            const mesh = new THREE.Mesh(
+                new THREE.BoxGeometry(0.8, 0.8, 0.8),
+                materials.fileBlock.clone()
+            );
+            mesh.position.set(x, 0.4, z);
+            mesh.castShadow = true;
+            mesh.userData = { name: fileName, glowTimer: 0, isNew: true };
+
+            scene.add(mesh);
+            files.push(mesh);
+            return mesh;
+        }
+
+        // ==================== AGENT STATE MANAGEMENT ====================
+        function setAgentState(agent, newState, data = {}) {
+            const d = agent.userData;
+            const oldState = d.state;
+            d.state = newState;
+            d.stateTimer = 0;
+
+            // Stop all particles
+            Object.values(d.particles).forEach(p => p.stop());
+
+            switch (newState) {
+                case AgentState.THINKING:
+                    d.particles.thinking.start(agent.position.x, agent.position.y, agent.position.z, 8);
+                    break;
+
+                case AgentState.WORKING:
+                    d.currentTask = data.task || 'Working...';
+                    break;
+
+                case AgentState.SUCCESS:
+                    d.particles.success.start(agent.position.x, agent.position.y, agent.position.z, 30);
+                    d.currentTask = null;
+                    setTimeout(() => {
+                        if (d.state === AgentState.SUCCESS) {
+                            setAgentState(agent, AgentState.IDLE);
+                        }
+                    }, 2000);
+                    break;
+
+                case AgentState.ERROR:
+                    d.particles.error.start(agent.position.x, agent.position.y, agent.position.z, 20);
+                    d.currentTask = null;
+                    setTimeout(() => {
+                        if (d.state === AgentState.ERROR) {
+                            setAgentState(agent, AgentState.IDLE);
+                        }
+                    }, 2000);
+                    break;
+            }
+
+            console.log(`${d.name}: ${oldState} → ${newState}`);
+        }
+
+        // ==================== POSITION FINDING ====================
+        function findPosition(minDist = 10) {
+            let attempts = 0;
+            let x, z;
+            const allObjects = [...houses, ...trees];
+
+            do {
+                const ring = Math.floor(allObjects.length / 8) + 1;
+                const angle = Math.random() * Math.PI * 2;
+                const dist = 25 + ring * 5 + Math.random() * 10; // Start further out from farm
+                x = Math.cos(angle) * dist;
+                z = Math.sin(angle) * dist;
+                attempts++;
+
+                // Check if inside farm zone - if so, skip
+                if (x > farmZone.minX - 5 && x < farmZone.maxX + 5 &&
+                    z > farmZone.minZ - 5 && z < farmZone.maxZ + 5) {
+                    continue;
+                }
+
+                let valid = true;
+                for (const obj of allObjects) {
+                    const dx = obj.position.x - x;
+                    const dz = obj.position.z - z;
+                    if (Math.sqrt(dx*dx + dz*dz) < minDist) {
+                        valid = false;
+                        break;
+                    }
+                }
+                if (valid) break;
+            } while (attempts < 100);
+
+            return { x, z };
+        }
+
+        // ==================== PUBLIC FUNCTIONS ====================
+        window.addHouse = function() {
+            const pos = findPosition(12);
+            createHouse(pos.x, pos.z);
+            updateStats();
+        };
+
+        window.addTree = function() {
+            const pos = findPosition(5);
+            createTree(pos.x, pos.z);
+            updateStats();
+        };
+
+        window.addAgent = function() {
+            if (houses.length === 0) window.addHouse();
+            const house = houses[Math.floor(Math.random() * houses.length)];
+            createAgent(house);
+            updateStats();
+        };
+
+        let autoMode = false;
+        let autoTimer = 0;
+
+        window.toggleAuto = function() {
+            autoMode = !autoMode;
+            document.getElementById('btn-auto').classList.toggle('active', autoMode);
+        };
+
+        // ==================== DEMO MODE ====================
+        const taskNames = [
+            'Escribir función login',
+            'Refactorizar auth module',
+            'Crear tests unitarios',
+            'Optimizar queries DB',
+            'Implementar cache',
+            'Documentar API',
+            'Fix bug #123',
+            'Update dependencias'
+        ];
+
+        const fileNames = [
+            'auth.js', 'login.ts', 'user.model.js', 'api.service.ts',
+            'utils.js', 'config.json', 'index.html', 'app.tsx'
+        ];
+
+        function runDemoEvent() {
+            if (agents.length === 0) return;
+
+            const agent = agents[Math.floor(Math.random() * agents.length)];
+            const d = agent.userData;
+
+            if (d.state !== AgentState.IDLE) return;
+
+            const rand = Math.random();
+
+            if (rand < 0.4) {
+                // Start task
+                const taskName = taskNames[Math.floor(Math.random() * taskNames.length)];
+                setAgentState(agent, AgentState.WORKING, { task: taskName });
+
+                // Complete after delay
+                setTimeout(() => {
+                    if (d.state === AgentState.WORKING) {
+                        if (Math.random() > 0.15) {
+                            setAgentState(agent, AgentState.SUCCESS);
+                            // Maybe create file
+                            if (Math.random() > 0.5) {
+                                const fileName = fileNames[Math.floor(Math.random() * fileNames.length)];
+                                createFileBlock(d.house, fileName);
+                                updateStats();
+                            }
+                        } else {
+                            setAgentState(agent, AgentState.ERROR);
+                        }
+                    }
+                }, 2000 + Math.random() * 3000);
+
+            } else if (rand < 0.7) {
+                // Think
+                setAgentState(agent, AgentState.THINKING);
+                setTimeout(() => {
+                    if (d.state === AgentState.THINKING) {
+                        setAgentState(agent, AgentState.IDLE);
+                    }
+                }, 1500 + Math.random() * 2000);
+            }
+        }
+
+        // ==================== UPDATE FUNCTIONS ====================
+        function updateStats() {
+            document.getElementById('houseCount').textContent = houses.length;
+            document.getElementById('agentCount').textContent = agents.length;
+            document.getElementById('fileCount').textContent = files.length;
+            document.getElementById('treeCount').textContent = trees.length;
+            document.getElementById('animalCount').textContent = animals.length + insects.length;
+            document.getElementById('floraCount').textContent = flowers.length + bushes.length + tallGrass.length + mushrooms.length;
+        }
+
+        function updateAgentsPanel() {
+            const list = document.getElementById('agents-list');
+            list.innerHTML = agents.map(a => {
+                const d = a.userData;
+                const color = '#' + d.colorHex.toString(16).padStart(6, '0');
+                return `
+                    <div class="agent-row">
+                        <div class="agent-color" style="background:${color}"></div>
+                        <span class="agent-name">${d.name}</span>
+                        <span class="agent-state ${d.state}">${d.state}</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // ==================== ANIMATION LOOP ====================
+        let lastTime = performance.now();
+        let demoTimer = 0;
+
+        function animate() {
+            const now = performance.now();
+            const dt = Math.min((now - lastTime) / 1000, 0.1);
+            lastTime = now;
+
+            requestAnimationFrame(animate);
+
+            // FPS calculation
+            frameCount++;
+            if (now - lastFpsUpdate >= 1000) {
+                currentFps = frameCount;
+                frameCount = 0;
+                lastFpsUpdate = now;
+                document.getElementById('fpsCount').textContent = currentFps;
+            }
+
+            // Movement (WASD + QE)
+            const direction = new THREE.Vector3();
+            camera.getWorldDirection(direction);
+            direction.y = 0;
+            direction.normalize();
+
+            const right = new THREE.Vector3();
+            right.crossVectors(direction, new THREE.Vector3(0, 1, 0));
+
+            if (droneMode && drone) {
+                // DRONE MODE - Control the drone, camera follows
+                // Disable orbit controls panning
+                controls.enablePan = false;
+                controls.enableZoom = true;
+                controls.enableRotate = true;
+
+                const speed = droneSpeed;
+
+                // Get camera forward direction (horizontal only)
+                const camDir = new THREE.Vector3();
+                camera.getWorldDirection(camDir);
+                camDir.y = 0;
+                camDir.normalize();
+
+                const camRight = new THREE.Vector3();
+                camRight.crossVectors(camDir, new THREE.Vector3(0, 1, 0));
+
+                // Move drone based on camera direction
+                if (moveState.forward) {
+                    drone.position.x += camDir.x * speed;
+                    drone.position.z += camDir.z * speed;
+                }
+                if (moveState.backward) {
+                    drone.position.x -= camDir.x * speed;
+                    drone.position.z -= camDir.z * speed;
+                }
+                if (moveState.left) {
+                    drone.position.x -= camRight.x * speed;
+                    drone.position.z -= camRight.z * speed;
+                }
+                if (moveState.right) {
+                    drone.position.x += camRight.x * speed;
+                    drone.position.z += camRight.z * speed;
+                }
+                if (moveState.up) {
+                    drone.position.y = Math.min(drone.position.y + speed * 0.5, 30);
+                }
+                if (moveState.down) {
+                    drone.position.y = Math.max(drone.position.y - speed * 0.5, 1);
+                }
+
+                // Drone faces movement direction
+                const isMoving = moveState.forward || moveState.backward || moveState.left || moveState.right;
+                if (isMoving) {
+                    let moveDir = new THREE.Vector3();
+                    if (moveState.forward) moveDir.add(camDir);
+                    if (moveState.backward) moveDir.sub(camDir);
+                    if (moveState.left) moveDir.sub(camRight);
+                    if (moveState.right) moveDir.add(camRight);
+                    if (moveDir.length() > 0) {
+                        drone.rotation.y = Math.atan2(moveDir.x, moveDir.z);
+                    }
+                }
+
+                // Tilt drone based on movement
+                const tiltAmount = 0.25;
+                const targetTiltX = moveState.forward ? tiltAmount : (moveState.backward ? -tiltAmount : 0);
+                const targetTiltZ = moveState.left ? -tiltAmount : (moveState.right ? tiltAmount : 0);
+                drone.rotation.x += (targetTiltX - drone.rotation.x) * 0.15;
+                drone.rotation.z += (targetTiltZ - drone.rotation.z) * 0.15;
+
+                // Spin propellers faster when moving
+                const propSpeed = isMoving ? 1.2 : 0.6;
+                drone.userData.propellers.forEach(prop => {
+                    prop.rotation.y += propSpeed;
+                });
+
+                // Camera follows drone - update OrbitControls target
+                controls.target.copy(drone.position);
+
+            } else {
+                // NORMAL MODE - Free camera movement
+                controls.enablePan = true;
+                if (moveState.forward) {
+                    controls.target.add(direction.clone().multiplyScalar(moveSpeed));
+                    camera.position.add(direction.clone().multiplyScalar(moveSpeed));
+                }
+                if (moveState.backward) {
+                    controls.target.sub(direction.clone().multiplyScalar(moveSpeed));
+                    camera.position.sub(direction.clone().multiplyScalar(moveSpeed));
+                }
+                if (moveState.left) {
+                    controls.target.sub(right.clone().multiplyScalar(moveSpeed));
+                    camera.position.sub(right.clone().multiplyScalar(moveSpeed));
+                }
+                if (moveState.right) {
+                    controls.target.add(right.clone().multiplyScalar(moveSpeed));
+                    camera.position.add(right.clone().multiplyScalar(moveSpeed));
+                }
+            }
+
+            controls.update();
+
+            // Clouds
+            for (let i = 0; i < cloudCount; i++) {
+                cloudData[i].x += cloudData[i].speed;
+                if (cloudData[i].x > 120) cloudData[i].x = -120;
+                dummy.position.set(cloudData[i].x, cloudData[i].y, cloudData[i].z);
+                dummy.scale.set(cloudData[i].scale, cloudData[i].scale * 0.5, cloudData[i].scale);
+                dummy.updateMatrix();
+                cloudMesh.setMatrixAt(i, dummy.matrix);
+            }
+            cloudMesh.instanceMatrix.needsUpdate = true;
+
+            // Pollen/dust particles
+            const pollenPos = pollenMesh.geometry.attributes.position.array;
+            for (let i = 0; i < pollenCount; i++) {
+                const pd = pollenData[i];
+                pd.drift += pd.driftSpeed * dt;
+                pollenPos[i * 3] += Math.sin(pd.drift) * 0.01;
+                pollenPos[i * 3 + 1] += Math.sin(pd.drift * 0.5) * 0.005;
+                pollenPos[i * 3 + 2] += Math.cos(pd.drift) * 0.01;
+
+                // Wrap around
+                if (pollenPos[i * 3] > 50) pollenPos[i * 3] = -50;
+                if (pollenPos[i * 3] < -50) pollenPos[i * 3] = 50;
+                if (pollenPos[i * 3 + 2] > 50) pollenPos[i * 3 + 2] = -50;
+                if (pollenPos[i * 3 + 2] < -50) pollenPos[i * 3 + 2] = 50;
+            }
+            pollenMesh.geometry.attributes.position.needsUpdate = true;
+
+            // Falling leaves
+            for (let i = 0; i < leafCount; i++) {
+                const leaf = leafMeshes[i];
+                const ld = leafDataArr[i];
+
+                leaf.position.y -= ld.fallSpeed * dt;
+                leaf.position.x += Math.sin(now * 0.001 * ld.swaySpeed + ld.swayPhase) * 0.02 + ld.driftX;
+                leaf.position.z += Math.cos(now * 0.001 * ld.swaySpeed + ld.swayPhase) * 0.02 + ld.driftZ;
+
+                leaf.rotation.x += ld.spinSpeed * dt;
+                leaf.rotation.z += ld.spinSpeed * 0.7 * dt;
+
+                // Reset when too low
+                if (leaf.position.y < 0) {
+                    leaf.position.y = 15 + Math.random() * 20;
+                    leaf.position.x = (Math.random() - 0.5) * 80;
+                    leaf.position.z = (Math.random() - 0.5) * 80;
+                }
+            }
+
+            // Agents
+            agents.forEach(agent => {
+                const d = agent.userData;
+                d.stateTimer += dt;
+
+                // Update particle positions
+                Object.values(d.particles).forEach(p => {
+                    p.basePosition.set(agent.position.x, agent.position.y, agent.position.z);
+                    p.update(dt);
+                });
+
+                switch (d.state) {
+                    case AgentState.IDLE:
+                        // Gentle bob
+                        d.bobCycle += dt * 2;
+                        agent.position.y = Math.sin(d.bobCycle) * 0.02;
+
+                        // Random movement
+                        d.moveTimer -= dt;
+                        if (d.moveTimer <= 0) {
+                            const h = d.house.userData;
+                            const angle = Math.random() * Math.PI * 2;
+                            const dist = 2 + Math.random() * 4;
+                            d.targetX = h.doorPosition.x + Math.cos(angle) * dist;
+                            d.targetZ = h.doorPosition.z + Math.sin(angle) * dist;
+                            d.moveTimer = 3 + Math.random() * 4;
+                        }
+
+                        // Walk to target
+                        const dx = d.targetX - agent.position.x;
+                        const dz = d.targetZ - agent.position.z;
+                        const dist = Math.sqrt(dx*dx + dz*dz);
+
+                        if (dist > 0.2) {
+                            agent.position.x += (dx/dist) * d.speed;
+                            agent.position.z += (dz/dist) * d.speed;
+                            agent.rotation.y = Math.atan2(dx, dz);
+
+                            d.walkCycle += 0.25;
+                            const swing = Math.sin(d.walkCycle) * 0.5;
+                            d.legs[0].rotation.x = swing;
+                            d.legs[1].rotation.x = -swing;
+                        } else {
+                            d.legs[0].rotation.x *= 0.9;
+                            d.legs[1].rotation.x *= 0.9;
+                        }
+                        break;
+
+                    case AgentState.THINKING:
+                        d.bobCycle += dt * 3;
+                        d.head.rotation.y = Math.sin(d.bobCycle) * 0.3;
+                        d.head.rotation.x = Math.sin(d.bobCycle * 0.7) * 0.1;
+                        break;
+
+                    case AgentState.WORKING:
+                        d.bobCycle += dt * 8;
+                        agent.position.y = Math.abs(Math.sin(d.bobCycle)) * 0.08;
+                        break;
+
+                    case AgentState.SUCCESS:
+                        d.bobCycle += dt * 12;
+                        agent.position.y = Math.abs(Math.sin(d.bobCycle)) * 0.3;
+                        break;
+
+                    case AgentState.ERROR:
+                        d.bobCycle += dt * 15;
+                        d.head.rotation.y = Math.sin(d.bobCycle) * 0.4;
+                        break;
+                }
+            });
+
+            // File glow animation
+            files.forEach(f => {
+                if (f.userData.isNew) {
+                    f.userData.glowTimer += dt;
+                    const glow = 0.5 + Math.sin(f.userData.glowTimer * 4) * 0.3;
+                    f.material.emissive = new THREE.Color(0x2266ff).multiplyScalar(glow);
+                    if (f.userData.glowTimer > 3) {
+                        f.userData.isNew = false;
+                        f.material.emissive = new THREE.Color(0x000000);
+                    }
+                }
+            });
+
+            // Tall grass wind animation
+            tallGrass.forEach(grassGroup => {
+                grassGroup.children.forEach(blade => {
+                    const phase = blade.userData.phase || 0;
+                    const original = blade.userData.originalRotation || 0;
+                    blade.rotation.z = original + Math.sin(now * 0.002 + phase) * 0.15;
+                });
+            });
+
+            // Animal AI and animation
+            animals.forEach(animal => {
+                const d = animal.userData;
+                d.stateTimer += dt;
+
+                // State machine
+                if (d.stateTimer > 2 + Math.random() * 3) {
+                    d.stateTimer = 0;
+                    const rand = Math.random();
+                    if (rand < 0.4) {
+                        // Wander
+                        d.state = 'walking';
+                        const angle = Math.random() * Math.PI * 2;
+                        const dist = 2 + Math.random() * 4;
+                        let newX = animal.position.x + Math.cos(angle) * dist;
+                        let newZ = animal.position.z + Math.sin(angle) * dist;
+
+                        // Keep confined animals inside farm
+                        if (d.confined) {
+                            newX = Math.max(farmZone.minX + 1, Math.min(farmZone.maxX - 1, newX));
+                            newZ = Math.max(farmZone.minZ + 1, Math.min(farmZone.maxZ - 1, newZ));
+                        }
+
+                        d.targetX = newX;
+                        d.targetZ = newZ;
+                    } else if (rand < 0.7) {
+                        d.state = 'eating';
+                    } else {
+                        d.state = 'idle';
+                    }
+                }
+
+                // Movement
+                const dx = d.targetX - animal.position.x;
+                const dz = d.targetZ - animal.position.z;
+                const dist = Math.sqrt(dx * dx + dz * dz);
+
+                if (d.state === 'walking' && dist > 0.2) {
+                    animal.position.x += (dx / dist) * d.speed;
+                    animal.position.z += (dz / dist) * d.speed;
+                    animal.rotation.y = Math.atan2(dx, dz);
+
+                    // Leg animation
+                    d.walkCycle += 0.2;
+                    if (d.legs) {
+                        if (d.type === 'chicken') {
+                            d.legs[0].rotation.x = Math.sin(d.walkCycle) * 0.5;
+                            d.legs[1].rotation.x = Math.sin(d.walkCycle + Math.PI) * 0.5;
+                        } else {
+                            d.legs[0].rotation.x = Math.sin(d.walkCycle) * 0.3;
+                            d.legs[1].rotation.x = Math.sin(d.walkCycle + Math.PI) * 0.3;
+                            if (d.legs[2]) {
+                                d.legs[2].rotation.x = Math.sin(d.walkCycle + Math.PI) * 0.3;
+                                d.legs[3].rotation.x = Math.sin(d.walkCycle) * 0.3;
+                            }
+                        }
+                    }
+                } else {
+                    // Reset legs
+                    if (d.legs) {
+                        d.legs.forEach(leg => {
+                            leg.rotation.x *= 0.9;
+                        });
+                    }
+                }
+
+                // Eating animation (head down)
+                if (d.state === 'eating' && d.head) {
+                    d.head.rotation.x = 0.5 + Math.sin(now * 0.005) * 0.1;
+                } else if (d.head) {
+                    d.head.rotation.x *= 0.9;
+                }
+
+                // Idle bobbing
+                if (d.state === 'idle') {
+                    animal.position.y = Math.sin(now * 0.003 + animal.id) * 0.02;
+                }
+            });
+
+            // Flying creatures animation
+            insects.forEach(insect => {
+                const d = insect.userData;
+                d.flightTimer += dt;
+                d.phase += dt * 20; // Wing flap speed
+
+                // Wing flapping
+                if (d.wings) {
+                    if (d.type === 'butterfly') {
+                        const flap = Math.sin(d.phase) * 0.8;
+                        d.wings[0].rotation.z = flap;
+                        d.wings[1].rotation.z = -flap;
+                        d.wings[2].rotation.z = flap * 0.7;
+                        d.wings[3].rotation.z = -flap * 0.7;
+                    } else if (d.type === 'bee') {
+                        const flap = Math.sin(d.phase * 2) * 0.3;
+                        d.wings[0].rotation.z = flap;
+                        d.wings[1].rotation.z = -flap;
+                    } else if (d.type === 'bird') {
+                        const flap = Math.sin(d.phase * 0.5) * 0.5;
+                        d.wings[0].rotation.z = flap;
+                        d.wings[1].rotation.z = -flap;
+                    }
+                }
+
+                // Movement behavior
+                if (d.type === 'butterfly') {
+                    // Erratic floating
+                    if (d.flightTimer > 1 + Math.random() * 2) {
+                        d.flightTimer = 0;
+                        d.targetX = d.homeX + (Math.random() - 0.5) * 10;
+                        d.targetY = 1 + Math.random() * 3;
+                        d.targetZ = d.homeZ + (Math.random() - 0.5) * 10;
+                    }
+                    insect.position.x += (d.targetX - insect.position.x) * 0.02;
+                    insect.position.y += (d.targetY - insect.position.y) * 0.02;
+                    insect.position.z += (d.targetZ - insect.position.z) * 0.02;
+                    insect.position.y += Math.sin(now * 0.003 + d.phase) * 0.01;
+                    insect.rotation.y = Math.atan2(d.targetX - insect.position.x, d.targetZ - insect.position.z);
+
+                } else if (d.type === 'bee') {
+                    // Fly near flowers
+                    if (d.flightTimer > 2 + Math.random() * 3) {
+                        d.flightTimer = 0;
+                        if (flowers.length > 0 && Math.random() > 0.3) {
+                            const flower = flowers[Math.floor(Math.random() * flowers.length)];
+                            d.targetX = flower.position.x + (Math.random() - 0.5) * 2;
+                            d.targetY = 0.5 + Math.random() * 1;
+                            d.targetZ = flower.position.z + (Math.random() - 0.5) * 2;
+                        } else {
+                            d.targetX = d.homeX + (Math.random() - 0.5) * 15;
+                            d.targetY = 0.5 + Math.random() * 2;
+                            d.targetZ = d.homeZ + (Math.random() - 0.5) * 15;
+                        }
+                    }
+                    insect.position.x += (d.targetX - insect.position.x) * 0.03;
+                    insect.position.y += (d.targetY - insect.position.y) * 0.03;
+                    insect.position.z += (d.targetZ - insect.position.z) * 0.03;
+                    insect.position.y += Math.sin(now * 0.008 + d.phase) * 0.02;
+                    insect.rotation.y = Math.atan2(d.targetX - insect.position.x, d.targetZ - insect.position.z);
+
+                } else if (d.type === 'bird') {
+                    // Circle and glide
+                    d.circleAngle += dt * 0.3;
+                    d.targetX = d.homeX + Math.cos(d.circleAngle) * d.circleRadius;
+                    d.targetZ = d.homeZ + Math.sin(d.circleAngle) * d.circleRadius;
+                    d.targetY = 10 + Math.sin(d.circleAngle * 0.5) * 3;
+
+                    insect.position.x += (d.targetX - insect.position.x) * 0.05;
+                    insect.position.y += (d.targetY - insect.position.y) * 0.05;
+                    insect.position.z += (d.targetZ - insect.position.z) * 0.05;
+
+                    // Face direction of travel
+                    insect.rotation.y = d.circleAngle + Math.PI / 2;
+                    insect.rotation.z = Math.sin(d.circleAngle) * 0.2; // Banking
+                }
+            });
+
+            // Auto generate
+            if (autoMode) {
+                autoTimer += dt;
+                demoTimer += dt;
+
+                if (autoTimer > 0.8) {
+                    autoTimer = 0;
+                    const r = Math.random();
+                    if (r < 0.15 && houses.length < 12) window.addHouse();
+                    else if (r < 0.3) window.addTree();
+                    else if (r < 0.5 && agents.length < 15) window.addAgent();
+                }
+
+                if (demoTimer > 1.5) {
+                    demoTimer = 0;
+                    runDemoEvent();
+                }
+            }
+
+            // Update UI
+            updateAgentsPanel();
+
+            renderer.render(scene, camera);
+        }
+
+        // ==================== RESIZE ====================
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // ==================== INITIAL SCENE ====================
+        // Spawn vegetation first
+        spawnVegetation();
+
+        // Create a pond
+        createPond(-25, 25, 5);
+
+        // Create fences around farm zone
+        createFence(farmZone.minX, farmZone.minZ, farmZone.maxX, farmZone.minZ); // Bottom
+        createFence(farmZone.maxX, farmZone.minZ, farmZone.maxX, farmZone.maxZ); // Right
+        createFence(farmZone.maxX, farmZone.maxZ, farmZone.minX, farmZone.maxZ); // Top
+        createFence(farmZone.minX, farmZone.maxZ, farmZone.minX, farmZone.minZ); // Left
+
+        // Spawn animals
+        spawnAnimals();
+
+        // Add trees, houses, and agents
+        for (let i = 0; i < 8; i++) window.addTree();
+        for (let i = 0; i < 3; i++) window.addHouse();
+        for (let i = 0; i < 4; i++) window.addAgent();
+
+        animate();
+
+        // Update stats initially
+        updateStats();
+
+        console.log('Agent Village - Mundo Vivo loaded!');
+        console.log('Vegetation:', flowers.length, 'flowers,', bushes.length, 'bushes,', tallGrass.length, 'grass patches');
+        console.log('Animals:', animals.length, 'ground animals,', insects.length, 'flying creatures');
+        console.log('Click "Auto" to start demo mode');
+    </script>
+</body>
+</html>
