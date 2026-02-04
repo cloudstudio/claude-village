@@ -4,7 +4,7 @@ A 3D visualization tool that brings your AI agent workflows to life. Watch your 
 
 ![Agent Village Demo](https://img.shields.io/badge/status-beta-yellow) ![License](https://img.shields.io/badge/license-MIT-blue)
 
-<!-- Video demo: Upload demo.mp4 from assets/ folder to GitHub release or drag into README editor -->
+https://github.com/user-attachments/assets/8036e2b3-694e-4f1e-918b-da9fa6517a17
 
 ## What is Agent Village?
 
