@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "agent-village": {
+      "command": "node",
+      "args": ["server/mcp.js"],
+      "env": {}
+    }
+  }
+}
