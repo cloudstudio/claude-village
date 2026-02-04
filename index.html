@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 
 <head>
     <meta charset="UTF-8">
@@ -9,38 +9,36 @@
 </head>
 
 <body>
-    <!-- UI Elements -->
-    <div id="info" class="glass-panel">
-        <h1>Agent Village</h1>
-        <p>Visualizador de Agentes Claude</p>
+    <!-- UI Panel - All in one -->
+    <div id="main-panel" class="glass-panel">
+        <button id="close-panel" onclick="window.toggleUI()">×</button>
+        <div id="connection">
+            <div class="conn-dot"></div>
+            <span>Demo Mode</span>
+        </div>
+        <div id="stats">
+            <div>FPS <span id="fpsCount">60</span></div>
+            <div>Fields <span id="fieldCount">0</span></div>
+            <div>Houses <span id="houseCount">0</span></div>
+            <div>Agents <span id="agentCount">0</span></div>
+        </div>
+        <div id="controls-help">
+            <span>WASD</span>Move
+            <span>Q/E</span>Height
+            <span>Mouse</span>Rotate
+            <span>Scroll</span>Zoom
+        </div>
+        <div id="controls">
+            <button onclick="window.addField('orchard')">Orchard</button>
+            <button onclick="window.addField('rice')">Rice</button>
+            <button onclick="window.addField('wheat')">Wheat</button>
+            <button onclick="window.addField('vegetable')">Vegetable</button>
+            <button onclick="window.addField('vineyard')">Vineyard</button>
+            <button onclick="window.addHouse()">House</button>
+            <button onclick="window.matureAllFields()">🌾 100%</button>
+        </div>
     </div>
-    <div id="stats" class="glass-panel">
-        <div>FPS <span id="fpsCount">60</span></div>
-        <div>Casas <span id="houseCount">0</span></div>
-        <div>Agentes <span id="agentCount">0</span></div>
-        <div>Archivos <span id="fileCount">0</span></div>
-        <div>Arboles <span id="treeCount">0</span></div>
-        <div>Animales <span id="animalCount">0</span></div>
-        <div>Flora <span id="floraCount">0</span></div>
-    </div>
-    <div id="controls-help" class="glass-panel">
-        <span>WASD</span>Mover &nbsp;
-        <span>Q/E</span>Altura &nbsp;
-        <span>Mouse</span>Rotar &nbsp;
-        <span>Scroll</span>Zoom
-    </div>
-    <div id="connection" class="glass-panel">
-        <div class="conn-dot"></div>
-        <span>Demo Mode</span>
-    </div>
-    <div id="agents-panel" class="glass-panel">
-        <h3>Agentes Activos</h3>
-        <div id="agents-list"></div>
-    </div>
-    <div id="controls">
-        <button onclick="window.addHouse()">Casa</button>
-        <button onclick="window.addAgent()">Agente</button>
-    </div>
+    <button id="open-panel" onclick="window.toggleUI()">☰</button>
 
     <script type="importmap">
     {

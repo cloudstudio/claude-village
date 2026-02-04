@@ -161,6 +161,50 @@ export function createAgent(scene, house) {
     leg2.position.set(0.12, 0.25, 0);
     group.add(leg2);
 
+    // Arms
+    const armMat = new THREE.MeshStandardMaterial({ color: colorHex, roughness: 0.3 });
+    const armGeo = new THREE.BoxGeometry(0.12, 0.45, 0.12);
+    const arm1 = new THREE.Mesh(armGeo, armMat);
+    arm1.position.set(-0.35, 0.85, 0);
+    group.add(arm1);
+    const arm2 = new THREE.Mesh(armGeo, armMat);
+    arm2.position.set(0.35, 0.85, 0);
+    group.add(arm2);
+
+    // Tool (hoe/azada) - held in right hand
+    const toolGroup = new THREE.Group();
+
+    // Handle (wooden stick)
+    const handleMat = new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.8 });
+    const handle = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.03, 0.03, 0.8, 6),
+        handleMat
+    );
+    handle.position.y = 0.4;
+    toolGroup.add(handle);
+
+    // Tool head (metal part)
+    const toolHeadMat = new THREE.MeshStandardMaterial({ color: 0x666666, metalness: 0.8, roughness: 0.3 });
+    const toolHead = new THREE.Mesh(
+        new THREE.BoxGeometry(0.2, 0.06, 0.08),
+        toolHeadMat
+    );
+    toolHead.position.set(0.08, 0.8, 0);
+    toolGroup.add(toolHead);
+
+    // Position tool at right hand
+    toolGroup.position.set(0.4, 0.6, 0.15);
+    toolGroup.rotation.z = -0.3;  // Slight angle
+    group.add(toolGroup);
+
+    // Carry basket/sack for harvesting
+    const carryGeo = new THREE.BoxGeometry(0.3, 0.2, 0.3);
+    const carryMat = new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.9 });
+    const carryMesh = new THREE.Mesh(carryGeo, carryMat);
+    carryMesh.position.set(0, 1.0, -0.25);  // On the back
+    carryMesh.visible = false;  // Hidden by default
+    group.add(carryMesh);
+
     // Position
     const door = house.userData.doorPosition;
     const agentY = getHeightAt(door.x, door.z);
@@ -175,20 +219,37 @@ export function createAgent(scene, house) {
         house,
         head,
         legs: [leg1, leg2],
+        arms: [arm1, arm2],
+        tool: toolGroup,
+        carryMesh,
         colorHex,
         state: AgentState.IDLE,
         currentTask: null,
         targetX: group.position.x,
         targetZ: group.position.z,
-        speed: 0.04 + Math.random() * 0.02,
+        speed: (0.04 + Math.random() * 0.02) * 2,  // 100% faster
         moveTimer: Math.random() * 3,
         walkCycle: 0,
         bobCycle: 0,
         stateTimer: 0,
+        // Field work properties
+        assignedField: null,
+        fieldWorkTimer: 0,
+        fieldWorkPosition: null,
+        workAnimationPhase: 0,
+        // Harvesting state
+        harvestPhase: 'idle',        // 'idle' | 'going_to_field' | 'collecting' | 'returning' | 'unloading'
+        harvestField: null,          // Field assigned for harvesting
+        harvestTimer: 0,             // Timer for harvest phases
+        harvestTargetSet: false,     // Flag to set target only once per phase
+        collectDuration: 3,          // Random duration for collecting
+        unloadDuration: 1,           // Random duration for unloading
+        carrying: false,             // If carrying harvested goods
         particles: {
             thinking: new ParticleSystem(scene, 30, 0xffdd00, 0.12),
             success: new ParticleSystem(scene, 50, 0x00ff88, 0.1),
-            error: new ParticleSystem(scene, 40, 0xff4444, 0.1)
+            error: new ParticleSystem(scene, 40, 0xff4444, 0.1),
+            work: new ParticleSystem(scene, 20, 0x8bc34a, 0.08)  // Green particles for work
         }
     };
 
@@ -196,6 +257,95 @@ export function createAgent(scene, house) {
     agents.push(group);
     house.userData.agents.push(group);
     return group;
+}
+
+// ==================== FLOATING TEXT SPRITE ====================
+function createTextCanvas(text, fontSize = 48, fontFamily = 'Arial', color = '#ffffff', bgColor = 'rgba(0,0,0,0.7)') {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+
+    // Measure text
+    ctx.font = `bold ${fontSize}px ${fontFamily}`;
+    const metrics = ctx.measureText(text);
+    const textWidth = metrics.width;
+
+    // Set canvas size with padding
+    const padding = 20;
+    canvas.width = textWidth + padding * 2;
+    canvas.height = fontSize + padding * 2;
+
+    // Draw background
+    ctx.fillStyle = bgColor;
+    const radius = 10;
+    ctx.beginPath();
+    ctx.roundRect(0, 0, canvas.width, canvas.height, radius);
+    ctx.fill();
+
+    // Draw text
+    ctx.font = `bold ${fontSize}px ${fontFamily}`;
+    ctx.fillStyle = color;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+
+    return canvas;
+}
+
+export function showAgentText(agent, text) {
+    // Remove existing text if any
+    hideAgentText(agent);
+
+    const canvas = createTextCanvas(text, 24);  // Smaller font
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+
+    const material = new THREE.SpriteMaterial({
+        map: texture,
+        transparent: true,
+        depthTest: false,
+    });
+
+    const sprite = new THREE.Sprite(material);
+
+    // Scale based on canvas aspect ratio - HALF SIZE
+    const aspect = canvas.width / canvas.height;
+    const scale = 1.25;  // Was 2.5, now half
+    sprite.scale.set(scale * aspect, scale, 1);
+
+    // Position above agent's head
+    sprite.position.y = 2.5;
+
+    agent.add(sprite);
+    agent.userData.textSprite = sprite;
+    agent.userData.textCanvas = canvas;
+
+    return sprite;
+}
+
+export function hideAgentText(agent) {
+    if (agent.userData.textSprite) {
+        agent.remove(agent.userData.textSprite);
+        if (agent.userData.textSprite.material.map) {
+            agent.userData.textSprite.material.map.dispose();
+        }
+        agent.userData.textSprite.material.dispose();
+        agent.userData.textSprite = null;
+        agent.userData.textCanvas = null;
+    }
+}
+
+export function updateAgentText(agent, text) {
+    if (agent.userData.textSprite) {
+        const canvas = createTextCanvas(text, 32);
+        agent.userData.textSprite.material.map.dispose();
+        agent.userData.textSprite.material.map = new THREE.CanvasTexture(canvas);
+        agent.userData.textSprite.material.map.needsUpdate = true;
+
+        const aspect = canvas.width / canvas.height;
+        const scale = 2.5;
+        agent.userData.textSprite.scale.set(scale * aspect, scale, 1);
+        agent.userData.textCanvas = canvas;
+    }
 }
 
 // ==================== FILE BLOCK ====================

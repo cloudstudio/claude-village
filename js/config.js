@@ -1,9 +1,59 @@
 // ==================== CONFIGURATION ====================
 
+// Field types for work areas
+export const FieldTypes = {
+    ORCHARD: 'orchard',      // Frutal (trees with fruits)
+    RICE: 'rice',            // Rice paddy (water + plants)
+    WHEAT: 'wheat',          // Wheat field (stalks)
+    VEGETABLE: 'vegetable',  // Vegetable garden (varied)
+    VINEYARD: 'vineyard',    // Vineyard (vines in rows)
+};
+
+// Field configuration per type - each can have its own size
+// Fields are centered in their grid cell (max size = FIELD_GRID.fieldSize)
+export const fieldConfig = {
+    [FieldTypes.ORCHARD]: {
+        width: 10,
+        depth: 10,
+        rows: 3,
+        cols: 3,
+        workAnimation: 'harvest'
+    },
+    [FieldTypes.RICE]: {
+        width: 9,
+        depth: 9,
+        rows: 4,
+        cols: 5,
+        workAnimation: 'plant'
+    },
+    [FieldTypes.WHEAT]: {
+        width: 10,
+        depth: 8,
+        rows: 5,
+        cols: 6,
+        workAnimation: 'harvest'
+    },
+    [FieldTypes.VEGETABLE]: {
+        width: 8,
+        depth: 8,
+        rows: 4,
+        cols: 4,
+        workAnimation: 'tend'
+    },
+    [FieldTypes.VINEYARD]: {
+        width: 10,
+        depth: 9,
+        rows: 3,
+        cols: 5,
+        workAnimation: 'prune'
+    }
+};
+
 // Farm/Corral zone (where animals and dirt will be)
+// Reduced size to make room for fields around it
 export const farmZone = {
-    minX: -18, maxX: 18,
-    minZ: -12, maxZ: 12
+    minX: -12, maxX: 12,
+    minZ: -8, maxZ: 8
 };
 
 // World grid (for ordered placement/movement)
@@ -38,7 +88,8 @@ export const AgentState = {
     THINKING: 'thinking',
     WORKING: 'working',
     SUCCESS: 'success',
-    ERROR: 'error'
+    ERROR: 'error',
+    HARVESTING: 'harvesting'
 };
 
 // Sky color
@@ -47,50 +98,70 @@ export const skyColor = 0x87CEEB;
 // Pond position (to avoid placing things on it)
 export const pondPosition = { x: 35, z: 0, radius: 8 };
 
-// Fixed positions for houses - starting from center and expanding outward
+// Field grid configuration - SIMPLE rectangular grid
+// Fields are placed in a simple grid starting from top-left, going right then down
+export const FIELD_GRID = {
+    // Grid origin (top-left corner of first field)
+    startX: -55,
+    startZ: -45,
+    // Field size (all fields same size)
+    fieldSize: 10,
+    // Gap between fields
+    gap: 2,
+    // Grid dimensions
+    columns: 10,  // Fields per row
+    rows: 8,      // Total rows
+    // Blocked cells (where HQ, farm, pond are) - 2 rows in the middle
+    // Row 3 and 4 (z from -9 to +15) contain all the main structures
+    blockedRows: [3, 4],
+};
+
+// Fixed positions for houses - OUTSIDE the field grid
+// Field grid: X from -55 to +65, Z from -45 to +51
+// Safe zones: X > 70 (right), X < -60 (left), Z > 55 (bottom), Z < -50 (top)
 export const housePositions = [
-    // Ring 1: Closest to farm center (just outside farm zone)
-    { x: 22, z: 0 },
-    { x: -22, z: 15 },
-    { x: 0, z: 20 },
-    { x: 15, z: -18 },
-    { x: -18, z: -15 },
-    // Ring 2: Medium distance
-    { x: 30, z: 12 },
-    { x: 28, z: -15 },
-    { x: -25, z: 25 },
-    { x: 12, z: 28 },
-    { x: -15, z: -28 },
-    // Ring 3: Further out
-    { x: 40, z: 5 },
-    { x: 38, z: -22 },
-    { x: -30, z: 35 },
-    { x: 25, z: 38 },
-    { x: -28, z: -35 },
-    // Ring 4: Outer areas
-    { x: 50, z: 15 },
-    { x: 48, z: -28 },
-    { x: 20, z: 48 },
-    { x: -45, z: 25 },
-    { x: -42, z: -28 },
-    // Ring 5: Far positions
-    { x: 55, z: 30 },
-    { x: 52, z: -38 },
-    { x: 35, z: 52 },
-    { x: -50, z: 40 },
-    { x: -48, z: -42 },
+    // Right zone (X > 70)
+    { x: 75, z: -20 },
+    { x: 75, z: 0 },
+    { x: 75, z: 20 },
+    { x: 85, z: -10 },
+    { x: 85, z: 10 },
+    { x: 95, z: -15 },
+    { x: 95, z: 5 },
+    // Bottom zone (Z > 55)
+    { x: -30, z: 60 },
+    { x: -10, z: 60 },
+    { x: 10, z: 60 },
+    { x: 30, z: 60 },
+    { x: -20, z: 70 },
+    { x: 0, z: 70 },
+    { x: 20, z: 70 },
+    // Top zone (Z < -50)
+    { x: -30, z: -55 },
+    { x: -10, z: -55 },
+    { x: 10, z: -55 },
+    { x: 30, z: -55 },
+    { x: -20, z: -65 },
+    { x: 0, z: -65 },
+    { x: 20, z: -65 },
+    // Left zone (X < -60)
+    { x: -65, z: -20 },
+    { x: -65, z: 0 },
+    { x: -65, z: 20 },
+    { x: -75, z: -10 },
+    { x: -75, z: 10 },
 ];
 
 // Demo task names
 export const taskNames = [
-    'Escribir función login',
-    'Refactorizar auth module',
-    'Crear tests unitarios',
-    'Optimizar queries DB',
-    'Implementar cache',
-    'Documentar API',
+    'Write login function',
+    'Refactor auth module',
+    'Create unit tests',
+    'Optimize DB queries',
+    'Implement cache',
+    'Document API',
     'Fix bug #123',
-    'Update dependencias'
+    'Update dependencies'
 ];
 
 // Demo file names

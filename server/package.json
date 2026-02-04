@@ -1,0 +1,15 @@
+{
+  "name": "agent-village-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for Agent Village visualization",
+  "type": "module",
+  "main": "mcp.js",
+  "scripts": {
+    "start": "node mcp.js",
+    "standalone": "node mcp.js --standalone"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "ws": "^8.16.0"
+  }
+}

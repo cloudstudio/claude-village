@@ -6,24 +6,110 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { WebSocketServer } from "ws";
+import { WebSocketServer, WebSocket } from "ws";
 
 // WebSocket server for frontend communication
 const WS_PORT = 8765;
 let wsClients = new Set();
 let wss = null;
+let wsClient = null;  // Client connection to existing server
+
+// Field types
+const FieldTypes = {
+  ORCHARD: 'orchard',
+  RICE: 'rice',
+  WHEAT: 'wheat',
+  VEGETABLE: 'vegetable',
+  VINEYARD: 'vineyard',
+};
+
+// Category to field type mapping for Kanban integration
+const CategoryToFieldType = {
+  task: FieldTypes.VEGETABLE,
+  agent: FieldTypes.ORCHARD,
+  skill: FieldTypes.VINEYARD,
+  planner: FieldTypes.WHEAT,
+  worker: FieldTypes.RICE,
+  reviewer: FieldTypes.VEGETABLE,
+};
 
 // Village state
 const state = {
   houses: [],
   agents: [],
+  fields: [],
   nextHouseId: 1,
   nextAgentId: 1,
+  nextFieldId: 1,
+  // Kanban state
+  kanban: {
+    board: null,
+    tasks: [],
+  },
 };
 
-// Start WebSocket server
-function startWebSocketServer() {
-  wss = new WebSocketServer({ port: WS_PORT });
+// Connect as client to existing WebSocket server
+// Returns a promise that resolves when connected
+function connectAsClient() {
+  return new Promise((resolve) => {
+    console.error(`[WS] Connecting as client to ws://localhost:${WS_PORT}...`);
+
+    wsClient = new WebSocket(`ws://localhost:${WS_PORT}`);
+
+    wsClient.on("open", () => {
+      console.error(`[WS] Connected as client to existing server`);
+      resolve(true);
+    });
+
+    wsClient.on("error", (err) => {
+      console.error(`[WS] Client connection error: ${err.message}`);
+      wsClient = null;
+      resolve(false);
+    });
+
+    wsClient.on("close", () => {
+      console.error(`[WS] Client connection closed`);
+      wsClient = null;
+    });
+
+    // Timeout after 2 seconds
+    setTimeout(() => {
+      if (wsClient && wsClient.readyState !== WebSocket.OPEN) {
+        console.error(`[WS] Connection timeout`);
+        resolve(false);
+      }
+    }, 2000);
+  });
+}
+
+// Start WebSocket server (or connect as client if server exists)
+async function startWebSocketServer() {
+  return new Promise((resolve) => {
+    // Try to start as server
+    wss = new WebSocketServer({ port: WS_PORT });
+
+    wss.on("error", async (err) => {
+      if (err.code === 'EADDRINUSE') {
+        console.error(`[WS] Port ${WS_PORT} in use. Connecting as client instead...`);
+        wss = null;
+        const connected = await connectAsClient();
+        resolve(connected);
+      } else {
+        console.error(`[WS] Server error: ${err.message}`);
+        resolve(false);
+      }
+    });
+
+    wss.on("listening", () => {
+      console.error(`[WS] WebSocket server running on ws://localhost:${WS_PORT}`);
+      setupServerHandlers();
+      resolve(true);
+    });
+  });
+}
+
+// Setup WebSocket server event handlers (separated for clarity)
+function setupServerHandlers() {
 
   wss.on("connection", (ws) => {
     console.error(`[WS] Client connected. Total: ${wsClients.size + 1}`);
@@ -52,6 +138,17 @@ function startWebSocketServer() {
           const { action, payload } = msg;
           handleCommand(action, payload);
         }
+        // Handle relay messages from other MCP instances
+        else if (msg.type === "relay") {
+          const { type: relayType, payload: relayPayload } = msg.payload;
+          // Broadcast to all OTHER clients (not back to sender)
+          const relayMsg = JSON.stringify({ type: relayType, payload: relayPayload });
+          for (const client of wsClients) {
+            if (client !== ws && client.readyState === 1) {
+              client.send(relayMsg);
+            }
+          }
+        }
         // Handle state updates from frontend
         else if (msg.type === "state_update") {
           Object.assign(state, msg.payload);
@@ -61,13 +158,25 @@ function startWebSocketServer() {
       }
     });
   });
-
-  console.error(`[WS] WebSocket server running on ws://localhost:${WS_PORT}`);
 }
 
-// Broadcast to all connected frontends
+// Broadcast to all connected frontends (or via client connection)
 function broadcast(type, payload) {
   const message = JSON.stringify({ type, payload });
+  console.error(`[BROADCAST] ${type} - wsClient: ${wsClient ? 'yes' : 'no'}, wsClients: ${wsClients.size}`);
+
+  // If we're connected as a client, send through that connection
+  if (wsClient && wsClient.readyState === WebSocket.OPEN) {
+    console.error(`[BROADCAST] Sending as relay to server`);
+    wsClient.send(JSON.stringify({
+      type: "relay",  // Tell the server to broadcast this
+      payload: { type, payload }
+    }));
+    return;
+  }
+
+  // Otherwise broadcast to our connected clients
+  console.error(`[BROADCAST] Sending to ${wsClients.size} clients directly`);
   for (const client of wsClients) {
     if (client.readyState === 1) {
       // OPEN
@@ -77,45 +186,190 @@ function broadcast(type, payload) {
 }
 
 // Handle commands from WebSocket clients (for testing without MCP)
+// SIMPLIFIED: Only village_* commands supported
 function handleCommand(action, payload = {}) {
   console.error(`[CMD] ${action}`, payload);
 
   switch (action) {
-    case "create_house": {
-      const houseId = state.nextHouseId++;
-      state.houses.push({ id: houseId, agents: [] });
-      broadcast("create_house", { id: houseId, ...payload });
-      console.error(`[CMD] Created house #${houseId}`);
+    case "village_create_board": {
+      state.kanban = {
+        board: { title: payload.title, createdAt: new Date().toISOString() },
+        tasks: [],
+      };
+      if (payload.tasks && payload.tasks.length > 0) {
+        for (const taskName of payload.tasks) {
+          createKanbanTask(taskName, 'task');
+        }
+      }
+      console.error(`[VILLAGE] Created board "${payload.title}" with ${payload.tasks?.length || 0} tasks`);
       break;
     }
-    case "create_agent": {
-      const agentId = state.nextAgentId++;
-      const name = payload.name || `Agent-${agentId}`;
-      state.agents.push({ id: agentId, name, state: "idle" });
-      broadcast("create_agent", { id: agentId, name, ...payload });
-      console.error(`[CMD] Created agent "${name}" #${agentId}`);
+    case "village_add_task": {
+      if (!state.kanban.board) {
+        state.kanban.board = { title: "Default", createdAt: new Date().toISOString() };
+      }
+      createKanbanTask(payload.task, payload.category || 'task', payload.parentTasks || []);
       break;
     }
-    case "set_agent_state": {
-      const agent = state.agents.find((a) => a.id === payload.agentId);
-      if (agent) {
-        agent.state = payload.state;
-        broadcast("set_agent_state", payload);
-        console.error(`[CMD] Agent #${payload.agentId} -> ${payload.state}`);
+    case "village_start_task": {
+      const task = findTaskByName(payload.task);
+      if (task) {
+        startKanbanTask(task);
+      } else {
+        console.error(`[VILLAGE] Task not found: ${payload.task}`);
       }
       break;
     }
-    case "create_file": {
-      broadcast("create_file", payload);
-      console.error(`[CMD] Created file "${payload.fileName}"`);
+    case "village_complete_task": {
+      const task = findTaskByName(payload.task);
+      if (task) {
+        completeKanbanTask(task, payload.summary);
+      } else {
+        console.error(`[VILLAGE] Task not found: ${payload.task}`);
+      }
       break;
     }
-    case "move_camera": {
-      broadcast("move_camera", payload);
-      console.error(`[CMD] Camera moved`);
+    case "village_get_status": {
+      console.error(`[VILLAGE] Status: ${state.kanban.tasks.length} tasks`);
+      break;
+    }
+    case "village_clear_board": {
+      state.kanban = { board: null, tasks: [] };
+      broadcast("village_clear_board", {});
+      console.error(`[VILLAGE] Board cleared`);
+      break;
+    }
+    default: {
+      console.error(`[CMD] Unknown command: ${action}`);
       break;
     }
   }
+}
+
+// ==================== VILLAGE HELPER FUNCTIONS ====================
+
+function findTaskByName(taskName) {
+  const lowerName = taskName.toLowerCase();
+  return state.kanban.tasks.find(t =>
+    t.name.toLowerCase().includes(lowerName) ||
+    lowerName.includes(t.name.toLowerCase())
+  );
+}
+
+function getFieldTypeForCategory(category) {
+  // If category maps to a field type, use it; otherwise pick random
+  if (CategoryToFieldType[category]) {
+    return CategoryToFieldType[category];
+  }
+  // Random field type
+  const types = Object.values(FieldTypes);
+  return types[Math.floor(Math.random() * types.length)];
+}
+
+function createKanbanTask(taskName, category = 'task', parentTasks = []) {
+  // 1. Create HOUSE for the agent
+  const houseId = state.nextHouseId++;
+  state.houses.push({ id: houseId, agents: [] });
+  broadcast("create_house", { id: houseId });
+
+  // 2. Create FIELD based on category
+  const fieldType = getFieldTypeForCategory(category);
+  const fieldId = state.nextFieldId++;
+  const field = {
+    id: fieldId,
+    type: fieldType,
+    progress: 0,
+    assignedAgent: null,
+    currentTask: taskName,
+  };
+  state.fields.push(field);
+  broadcast("create_field", { id: fieldId, type: fieldType });
+
+  // 3. Create AGENT for the task
+  const agentId = state.nextAgentId++;
+  const agentName = taskName.substring(0, 15);
+  const agent = {
+    id: agentId,
+    name: agentName,
+    houseId,  // Assign to the house
+    state: "idle",
+    assignedField: fieldId,
+    currentTask: taskName,
+  };
+  state.agents.push(agent);
+  broadcast("create_agent", { id: agentId, name: agentName, houseId });
+
+  // 4. Assign agent to field
+  field.assignedAgent = agentId;
+  broadcast("start_task", {
+    agentId,
+    taskName,
+    fieldId,
+  });
+
+  // 5. Show floating text
+  broadcast("show_agent_text", {
+    agentId,
+    text: taskName,
+  });
+
+  // Create kanban task record
+  const task = {
+    id: `task-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+    name: taskName,
+    category,
+    status: 'pending',
+    agentId,
+    fieldId,
+    houseId,  // Store house reference
+    parentTasks,
+    summary: null,
+    createdAt: new Date().toISOString(),
+  };
+  state.kanban.tasks.push(task);
+
+  console.error(`[VILLAGE] Created task "${taskName}" with house #${houseId}, agent #${agentId}, and ${fieldType} field #${fieldId}`);
+  return task;
+}
+
+function startKanbanTask(task) {
+  const agent = state.agents.find(a => a.id === task.agentId);
+  if (agent) {
+    agent.state = "working";
+    task.status = 'in_progress';
+    broadcast("set_agent_state", { agentId: task.agentId, state: "working" });
+    console.error(`[VILLAGE] Started task "${task.name}"`);
+  }
+}
+
+function completeKanbanTask(task, summary) {
+  task.status = 'completed';
+  task.summary = summary;
+
+  // 1. Field to 100% - this triggers HARVESTING mode in frontend
+  const field = state.fields.find(f => f.id === task.fieldId);
+  if (field) {
+    field.progress = 100;
+    broadcast("set_field_progress", { fieldId: task.fieldId, progress: 100, agentId: task.agentId });
+  }
+
+  // 2. Create sign with summary in front of field
+  if (summary) {
+    broadcast("create_field_sign", { fieldId: task.fieldId, summary: summary });
+  }
+
+  // 3. Update internal state (agent is now harvesting, handled by frontend)
+  const agent = state.agents.find(a => a.id === task.agentId);
+  if (agent) {
+    agent.state = "harvesting";
+  }
+
+  // 4. Hide floating text after delay
+  setTimeout(() => {
+    broadcast("hide_agent_text", { agentId: task.agentId });
+  }, 2000);
+
+  console.error(`[VILLAGE] Completed task "${task.name}": ${summary || 'Done'}`);
 }
 
 // Create MCP server
@@ -131,252 +385,254 @@ const server = new Server(
   }
 );
 
-// Define available tools
+// Define available tools - SIMPLIFIED: Only 6 village tools
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
       {
-        name: "create_house",
+        name: "village_create_board",
         description:
-          "Create a new house in the Agent Village. Houses are work areas where agents can operate.",
+          "Create a new Village board with optional initial tasks. Each task creates a field + agent with floating text showing the task name.",
         inputSchema: {
           type: "object",
           properties: {
-            x: {
-              type: "number",
-              description:
-                "Optional X position. If not provided, auto-positioned.",
+            title: {
+              type: "string",
+              description: "Title of the board (e.g., 'Sprint 1', 'Feature X')",
             },
-            z: {
-              type: "number",
-              description:
-                "Optional Z position. If not provided, auto-positioned.",
+            tasks: {
+              type: "array",
+              items: { type: "string" },
+              description: "Optional list of initial task names to create",
             },
           },
+          required: ["title"],
         },
       },
       {
-        name: "create_agent",
+        name: "village_add_task",
         description:
-          "Create a new agent in the Agent Village. Agents are visual representations of Claude working on tasks.",
+          "Add a new task to the Village board. Creates a field + agent with floating text. Category determines field type: task=vegetable, agent=orchard, skill=vineyard, planner=wheat, worker=rice, reviewer=vegetable.",
         inputSchema: {
           type: "object",
           properties: {
-            name: {
+            task: {
               type: "string",
-              description: "Name for the agent (e.g., 'Claude', 'Agent-1')",
+              description: "Task name/description",
             },
-            houseId: {
-              type: "number",
-              description:
-                "Optional house ID to assign the agent to. If not provided, assigns to HQ.",
+            category: {
+              type: "string",
+              enum: ["task", "agent", "skill", "planner", "worker", "reviewer"],
+              description: "Task category (determines field type). Default: task",
+            },
+            parentTasks: {
+              type: "array",
+              items: { type: "string" },
+              description: "Optional parent task names for workflow visualization",
+            },
+            summary: {
+              type: "string",
+              description: "Brief summary of what this task will do",
             },
           },
+          required: ["task"],
         },
       },
       {
-        name: "set_agent_state",
+        name: "village_start_task",
         description:
-          "Change an agent's visual state. States: 'idle', 'thinking', 'working', 'success', 'error'",
+          "Start working on a task. Agent begins work animation in its field.",
         inputSchema: {
           type: "object",
           properties: {
-            agentId: {
-              type: "number",
-              description: "ID of the agent to update",
-            },
-            state: {
+            task: {
               type: "string",
-              enum: ["idle", "thinking", "working", "success", "error"],
-              description: "New state for the agent",
-            },
-            taskName: {
-              type: "string",
-              description:
-                "Optional task name to display (for thinking/working states)",
+              description: "Task name (partial match supported)",
             },
           },
-          required: ["agentId", "state"],
+          required: ["task"],
         },
       },
       {
-        name: "create_file",
+        name: "village_complete_task",
         description:
-          "Create a visual file block near an agent's house. Represents code or files being created.",
+          "Mark a task as completed. Field goes to 100%, agent celebrates with ✓, then walks back home. Floating text disappears.",
         inputSchema: {
           type: "object",
           properties: {
-            fileName: {
+            task: {
               type: "string",
-              description: "Name of the file (e.g., 'app.js', 'styles.css')",
+              description: "Task name (partial match supported)",
             },
-            agentId: {
-              type: "number",
-              description: "ID of the agent creating the file",
+            summary: {
+              type: "string",
+              description: "Summary of what was accomplished",
             },
           },
-          required: ["fileName"],
+          required: ["task"],
         },
       },
       {
-        name: "get_village_state",
+        name: "village_get_status",
         description:
-          "Get the current state of the Agent Village including all houses and agents.",
+          "Get current Village board status including all tasks and their states.",
         inputSchema: {
           type: "object",
           properties: {},
         },
       },
       {
-        name: "move_camera",
+        name: "village_clear_board",
         description:
-          "Move the camera/drone to focus on a specific location or agent.",
+          "Clear/archive the current board to start fresh.",
         inputSchema: {
           type: "object",
-          properties: {
-            x: {
-              type: "number",
-              description: "X coordinate to move to",
-            },
-            z: {
-              type: "number",
-              description: "Z coordinate to move to",
-            },
-            agentId: {
-              type: "number",
-              description: "Or specify an agent ID to focus on",
-            },
-          },
+          properties: {},
         },
       },
     ],
   };
 });
 
-// Handle tool calls
+// Handle tool calls - SIMPLIFIED: Only village_* handlers
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
   switch (name) {
-    case "create_house": {
-      const houseId = state.nextHouseId++;
-      const house = {
-        id: houseId,
-        x: args?.x,
-        z: args?.z,
-        agents: [],
+    case "village_create_board": {
+      // Clear existing board
+      state.kanban = {
+        board: {
+          title: args.title,
+          createdAt: new Date().toISOString(),
+        },
+        tasks: [],
       };
-      state.houses.push(house);
 
-      broadcast("create_house", { id: houseId, x: args?.x, z: args?.z });
+      const createdTasks = [];
+
+      // Create initial tasks if provided
+      if (args.tasks && args.tasks.length > 0) {
+        for (const taskName of args.tasks) {
+          const task = createKanbanTask(taskName, 'task');
+          createdTasks.push(task.name);
+        }
+      }
 
       return {
         content: [
           {
             type: "text",
-            text: `Created house #${houseId}${args?.x !== undefined ? ` at position (${args.x}, ${args.z})` : " at auto-generated position"}`,
+            text: `Created Village board "${args.title}"${createdTasks.length > 0 ? ` with ${createdTasks.length} tasks: ${createdTasks.join(', ')}` : ''}`,
           },
         ],
       };
     }
 
-    case "create_agent": {
-      const agentId = state.nextAgentId++;
-      const agentName = args?.name || `Agent-${agentId}`;
-      const agent = {
-        id: agentId,
-        name: agentName,
-        houseId: args?.houseId || null,
-        state: "idle",
-      };
-      state.agents.push(agent);
+    case "village_add_task": {
+      if (!state.kanban.board) {
+        state.kanban.board = {
+          title: "Default Board",
+          createdAt: new Date().toISOString(),
+        };
+      }
 
-      broadcast("create_agent", {
-        id: agentId,
-        name: agentName,
-        houseId: args?.houseId,
-      });
+      const category = args.category || 'task';
+      const parentTasks = args.parentTasks || [];
+      const task = createKanbanTask(args.task, category, parentTasks);
 
       return {
         content: [
           {
             type: "text",
-            text: `Created agent "${agentName}" (ID: ${agentId})${args?.houseId ? ` assigned to house #${args.houseId}` : " at headquarters"}`,
+            text: `Added task "${args.task}" (${category}) with agent #${task.agentId} working in ${getFieldTypeForCategory(category)} field #${task.fieldId}`,
           },
         ],
       };
     }
 
-    case "set_agent_state": {
-      const agent = state.agents.find((a) => a.id === args.agentId);
-      if (!agent) {
+    case "village_start_task": {
+      const task = findTaskByName(args.task);
+      if (!task) {
         return {
-          content: [
-            { type: "text", text: `Agent #${args.agentId} not found` },
-          ],
+          content: [{ type: "text", text: `Task "${args.task}" not found` }],
           isError: true,
         };
       }
 
-      agent.state = args.state;
-
-      broadcast("set_agent_state", {
-        agentId: args.agentId,
-        state: args.state,
-        taskName: args.taskName,
-      });
+      startKanbanTask(task);
 
       return {
         content: [
           {
             type: "text",
-            text: `Agent "${agent.name}" state changed to ${args.state}${args.taskName ? ` (task: ${args.taskName})` : ""}`,
+            text: `Started task "${task.name}" - agent #${task.agentId} is now working`,
           },
         ],
       };
     }
 
-    case "create_file": {
-      broadcast("create_file", {
-        fileName: args.fileName,
-        agentId: args.agentId,
-      });
+    case "village_complete_task": {
+      const task = findTaskByName(args.task);
+      if (!task) {
+        return {
+          content: [{ type: "text", text: `Task "${args.task}" not found` }],
+          isError: true,
+        };
+      }
+
+      completeKanbanTask(task, args.summary);
 
       return {
         content: [
           {
             type: "text",
-            text: `Created file "${args.fileName}"${args.agentId ? ` by agent #${args.agentId}` : ""}`,
+            text: `Completed task "${task.name}"${args.summary ? `: ${args.summary}` : ''}. Agent celebrating and returning home.`,
           },
         ],
       };
     }
 
-    case "get_village_state": {
+    case "village_get_status": {
+      const board = state.kanban.board;
+      const tasks = state.kanban.tasks;
+
+      if (!board) {
+        return {
+          content: [{ type: "text", text: "No Village board active. Use village_create_board to start." }],
+        };
+      }
+
+      const pending = tasks.filter(t => t.status === 'pending').length;
+      const inProgress = tasks.filter(t => t.status === 'in_progress').length;
+      const completed = tasks.filter(t => t.status === 'completed').length;
+
+      const taskList = tasks.map(t =>
+        `- [${t.status}] ${t.name} (agent #${t.agentId}, field #${t.fieldId})${t.summary ? ` - ${t.summary}` : ''}`
+      ).join('\n');
+
       return {
         content: [
           {
             type: "text",
-            text: JSON.stringify(state, null, 2),
+            text: `Board: ${board.title}\nPending: ${pending} | In Progress: ${inProgress} | Completed: ${completed}\n\nTasks:\n${taskList || '(no tasks)'}`,
           },
         ],
       };
     }
 
-    case "move_camera": {
-      broadcast("move_camera", {
-        x: args?.x,
-        z: args?.z,
-        agentId: args?.agentId,
-      });
+    case "village_clear_board": {
+      const oldBoard = state.kanban.board;
+      state.kanban = {
+        board: null,
+        tasks: [],
+      };
 
       return {
         content: [
           {
             type: "text",
-            text: args?.agentId
-              ? `Camera focusing on agent #${args.agentId}`
-              : `Camera moving to (${args?.x || 0}, ${args?.z || 0})`,
+            text: oldBoard ? `Cleared board "${oldBoard.title}"` : "No board to clear",
           },
         ],
       };
@@ -395,15 +651,20 @@ const standaloneMode = process.argv.includes("--standalone");
 
 // Start servers
 async function main() {
-  // Start WebSocket server for frontend
-  startWebSocketServer();
-
   if (standaloneMode) {
+    // Standalone mode: WebSocket server only (for frontend)
+    await startWebSocketServer();
     console.error("[Server] Running in standalone mode (WebSocket only)");
     console.error("[Server] Press Ctrl+C to stop");
     // Keep process alive
     process.stdin.resume();
   } else {
+    // MCP mode: Try to start WebSocket, but don't fail if port is in use
+    // This allows Claude Code to connect even when standalone is running
+    // IMPORTANT: Wait for WebSocket connection before starting MCP
+    await startWebSocketServer();
+    console.error("[WS] WebSocket ready, starting MCP server...");
+
     // Start MCP server on stdio (for Claude Code integration)
     const transport = new StdioServerTransport();
     await server.connect(transport);

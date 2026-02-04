@@ -334,45 +334,13 @@ export function createHeadquarters(scene) {
     rightGeo.translate(width / 2, wallHeight / 2 + 0.6, 0);
     geometries.push({ geo: rightGeo, mat: wallMat });
 
-    // Roof - Simple peaked roof using boxes
-    const roofOverhang = 1.5;
-    const roofThickness = 0.4;
-    const roofHeight = 3;
+    // Roof - Simple flat roof with slight overhang
+    const roofOverhang = 2;
+    const roofThickness = 0.5;
 
-    // Left roof panel
-    const leftRoofGeo = new THREE.BoxGeometry(width / 2 + roofOverhang, roofThickness, depth + roofOverhang);
-    leftRoofGeo.translate(-width / 4, 0, 0);
-    leftRoofGeo.rotateZ(Math.PI / 6);
-    leftRoofGeo.translate(0, wallHeight + 0.6 + roofHeight / 2, 0);
-    geometries.push({ geo: leftRoofGeo, mat: roofMat });
-
-    // Right roof panel
-    const rightRoofGeo = new THREE.BoxGeometry(width / 2 + roofOverhang, roofThickness, depth + roofOverhang);
-    rightRoofGeo.translate(width / 4, 0, 0);
-    rightRoofGeo.rotateZ(-Math.PI / 6);
-    rightRoofGeo.translate(0, wallHeight + 0.6 + roofHeight / 2, 0);
-    geometries.push({ geo: rightRoofGeo, mat: roofMat });
-
-    // Roof ridge cap
-    const ridgeGeo = new THREE.BoxGeometry(0.6, 0.4, depth + roofOverhang + 0.5);
-    ridgeGeo.translate(0, wallHeight + 0.6 + roofHeight + 0.5, 0);
-    geometries.push({ geo: ridgeGeo, mat: roofMat });
-
-    // Fill gable triangles with boxes (front)
-    for (let i = 0; i < 5; i++) {
-        const gableW = width * (1 - i * 0.2);
-        const gableGeo = new THREE.BoxGeometry(gableW, 0.6, 0.5);
-        gableGeo.translate(0, wallHeight + 0.9 + i * 0.6, depth / 2);
-        geometries.push({ geo: gableGeo, mat: wallMat });
-    }
-
-    // Fill gable triangles (back)
-    for (let i = 0; i < 5; i++) {
-        const gableW = width * (1 - i * 0.2);
-        const gableGeo = new THREE.BoxGeometry(gableW, 0.6, 0.5);
-        gableGeo.translate(0, wallHeight + 0.9 + i * 0.6, -depth / 2);
-        geometries.push({ geo: gableGeo, mat: wallMat });
-    }
+    const roofGeo = new THREE.BoxGeometry(width + roofOverhang, roofThickness, depth + roofOverhang);
+    roofGeo.translate(0, wallHeight + 0.6 + roofThickness / 2, 0);
+    geometries.push({ geo: roofGeo, mat: roofMat });
 
     // Big barn door (facing farm - on RIGHT side, +X direction)
     const barnDoorH = 3.5;
@@ -453,7 +421,7 @@ export function createHeadquarters(scene) {
 
     group.position.set(x, y, z);
     group.userData = {
-        x, z, width, depth, height: wallHeight + roofHeight, agents: [],
+        x, z, width, depth, height: wallHeight + 0.5, agents: [],
         doorPosition: { x: x + width / 2 + 2, y: y, z: z },  // Door faces +X (toward farm)
         isHQ: true,
         bounds: {

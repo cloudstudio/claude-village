@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { materials } from './materials.js';
-import { housePositions, pondPosition, farmZone, grid, houseLayout } from './config.js';
+import { housePositions, pondPosition, farmZone, grid, houseLayout, FIELD_GRID } from './config.js';
 import { getHeightAt, trees, flowers, bushes, rocks, registerPosition, isPositionFree, snapToGrid } from './terrain.js';
 
 const GRID_STEP = grid?.size ?? 6;
@@ -16,6 +16,30 @@ function isInsideFarm(x, z, padding = 0) {
         x < farmZone.maxX + padding &&
         z > farmZone.minZ - padding &&
         z < farmZone.maxZ + padding
+    );
+}
+
+// Check if position is inside the HQ area (barn at x=-35, z=0)
+function isInHQArea(x, z, padding = 0) {
+    const hqX = -35;
+    const hqZ = 0;
+    const dx = x - hqX;
+    const dz = z - hqZ;
+    const dist = Math.sqrt(dx * dx + dz * dz);
+    return dist < 20 + padding;  // 20 unit radius around HQ
+}
+
+// Check if position is inside the field grid area
+function isInFieldArea(x, z, padding = 6) {
+    const grid = FIELD_GRID;
+    const endX = grid.startX + grid.columns * (grid.fieldSize + grid.gap);
+    const endZ = grid.startZ + grid.rows * (grid.fieldSize + grid.gap);
+
+    return (
+        x > grid.startX - padding &&
+        x < endX + padding &&
+        z > grid.startZ - padding &&
+        z < endZ + padding
     );
 }
 
@@ -76,6 +100,8 @@ function placeOnGrid(scene, options) {
         const { x: gx, z: gz } = cells[i];
         if (!shouldUseCell(gx, gz, pattern, offset)) continue;
         if (avoidFarm && isInsideFarm(gx, gz, 2)) continue;
+        if (isInHQArea(gx, gz, 4)) continue;  // Avoid HQ/barn area
+        if (isInFieldArea(gx, gz, 4)) continue;  // Avoid field grid area
         const dist = Math.hypot(gx, gz);
         if (excludeMinDist !== null && excludeMaxDist !== null) {
             if (dist >= excludeMinDist && dist <= excludeMaxDist) continue;
@@ -367,6 +393,8 @@ export function createSmallStones(scene) {
 
         if (!shouldUseCell(gx, gz, 2, 0)) continue;
         if (isInsideFarm(gx, gz, 2)) continue;
+        if (isInHQArea(gx, gz, 4)) continue;
+        if (isInFieldArea(gx, gz, 4)) continue;
         if (isNearHousePosition(gx, gz, 4)) continue;
         if (!isPositionFree(gx, gz, 0.4, true)) continue;
 

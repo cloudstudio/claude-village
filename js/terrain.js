@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { farmZone, housePositions, pondPosition, grid, houseLayout } from './config.js';
+import { farmZone, housePositions, pondPosition, grid, houseLayout, FIELD_GRID } from './config.js';
 
 // ==================== STORAGE ====================
 export const houses = [];
@@ -13,6 +13,7 @@ export const mushrooms = [];
 export const rocks = [];
 export const animals = [];
 export const insects = [];
+export const fields = [];  // Work fields (orchard, rice, wheat, etc.)
 
 // Occupied positions tracker
 const occupiedPositions = [];
@@ -94,6 +95,20 @@ function isInFarm(x, z, padding = 0) {
     );
 }
 
+// Check if position is inside the field grid area
+function isInFieldArea(x, z, padding = 6) {
+    const grid = FIELD_GRID;
+    const endX = grid.startX + grid.columns * (grid.fieldSize + grid.gap);
+    const endZ = grid.startZ + grid.rows * (grid.fieldSize + grid.gap);
+
+    return (
+        x > grid.startX - padding &&
+        x < endX + padding &&
+        z > grid.startZ - padding &&
+        z < endZ + padding
+    );
+}
+
 function getHouseSlots() {
     if (houseSlots) return houseSlots;
 
@@ -125,6 +140,7 @@ function getHouseSlots() {
             if (isInFarm(gx, gz, HOUSE_EXCLUDE_PADDING)) continue;
             if (isInPond(gx, gz, HOUSE_EXCLUDE_PADDING)) continue;
             if (isInHQArea(gx, gz)) continue;
+            if (isInFieldArea(gx, gz, HOUSE_EXCLUDE_PADDING)) continue;
             addSlot(gx, gz);
         }
     }
@@ -352,14 +368,30 @@ export function getRandomPositionOutsideFarm(minDist, maxDist, radius = 1) {
 // Minimum distance between house centers
 const MIN_HOUSE_SPACING = 16;
 
-// Check if position collides with existing houses
-function collidesWithHouses(x, z, minSpacing = MIN_HOUSE_SPACING) {
+// Check if position collides with existing houses (exported for use by fields.js)
+export function collidesWithHouses(x, z, minSpacing = MIN_HOUSE_SPACING) {
     for (const house of houses) {
         const hd = house.userData;
         const dx = hd.x - x;
         const dz = hd.z - z;
         const dist = Math.sqrt(dx * dx + dz * dz);
         if (dist < minSpacing) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Check if position collides with existing fields
+export function collidesWithFields(x, z, padding = 2) {
+    for (const field of fields) {
+        const fd = field.userData;
+        const halfW = (fd.width || 10) / 2 + padding;
+        const halfD = (fd.depth || 10) / 2 + padding;
+
+        // AABB collision check
+        if (x > fd.x - halfW && x < fd.x + halfW &&
+            z > fd.z - halfD && z < fd.z + halfD) {
             return true;
         }
     }
@@ -383,9 +415,13 @@ export function findPosition(minDist = 12) {
         if (isInPond(snapped.x, snapped.z, HOUSE_EXCLUDE_PADDING)) continue;
         if (isInHQArea(snapped.x, snapped.z)) continue;
         if (isInFarm(snapped.x, snapped.z, HOUSE_EXCLUDE_PADDING)) continue;
+        if (isInFieldArea(snapped.x, snapped.z, HOUSE_EXCLUDE_PADDING)) continue;
 
         // Skip if too close to existing houses
         if (collidesWithHouses(snapped.x, snapped.z, spacing)) continue;
+
+        // Skip if collides with existing fields
+        if (collidesWithFields(snapped.x, snapped.z, HOUSE_EXCLUDE_PADDING)) continue;
 
         // Skip if position already occupied
         if (!isPositionFree(snapped.x, snapped.z, spacing / 2)) continue;
@@ -402,10 +438,16 @@ export function findPosition(minDist = 12) {
         const x = Math.cos(angle) * dist;
         const z = Math.sin(angle) * dist;
 
-        if (!collidesWithHouses(x, z, spacing)) {
-            registerPosition(x, z, spacing / 2);
-            return { x, z };
-        }
+        // Check ALL exclusion zones in fallback too
+        if (isInPond(x, z, HOUSE_EXCLUDE_PADDING)) continue;
+        if (isInHQArea(x, z)) continue;
+        if (isInFarm(x, z, HOUSE_EXCLUDE_PADDING)) continue;
+        if (isInFieldArea(x, z, HOUSE_EXCLUDE_PADDING)) continue;
+        if (collidesWithHouses(x, z, spacing)) continue;
+        if (collidesWithFields(x, z, HOUSE_EXCLUDE_PADDING)) continue;
+
+        registerPosition(x, z, spacing / 2);
+        return { x, z };
     }
 
     // Last resort

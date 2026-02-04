@@ -3,12 +3,13 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 
-import { skyColor, farmZone, grid, AgentState, taskNames, fileNames } from './config.js';
-import { createGround, houses, agents, trees, files, flowers, bushes, animals, insects, findPosition, getHeightAt, getRandomPositionInFarm, snapToGrid, rocks } from './terrain.js';
+import { skyColor, farmZone, grid, AgentState, taskNames, fileNames, FieldTypes, fieldConfig } from './config.js';
+import { createGround, houses, agents, trees, files, flowers, bushes, animals, insects, fields, findPosition, getHeightAt, getRandomPositionInFarm, snapToGrid, rocks } from './terrain.js';
 import { createHouse, createHeadquarters, createFence, createPond, headquarters, pondWater, pondWaterData } from './buildings.js';
+import { createField, updateFieldProgress, getFieldWorkPosition, assignAgentToField, releaseAgentFromField } from './fields.js';
 import { createTree, spawnVegetation, createSmallStones, createDirtPatches } from './vegetation.js';
 import { spawnAnimals } from './animals.js';
-import { createAgent, createFileBlock } from './agents.js';
+import { createAgent, createFileBlock, showAgentText, hideAgentText } from './agents.js';
 import { createClouds, createInstancedClouds, createPollen, createFallingLeaves, updateClouds, updateInstancedClouds, updatePollen, updateLeaves, createChimneySmoke, addSmokeToHouse, updateChimneySmoke } from './atmosphere.js';
 import { setupControls, initDrone, updateControls, droneMode } from './controls.js';
 
@@ -154,17 +155,136 @@ function pickWildTarget(d) {
     return pickGridTargetAround(d.homeX, d.homeZ, roamRadius, GRID_SIZE, mapBounds);
 }
 
+// ==================== HARVEST PRODUCE SYSTEM ====================
+function createHarvestProduce(house, fieldType) {
+    if (!house.userData.produce) {
+        house.userData.produce = [];
+    }
+
+    const produceCount = house.userData.produce.length;
+    const maxProduce = 20;
+
+    if (produceCount >= maxProduce) {
+        const oldProduce = house.userData.produce.shift();
+        scene.remove(oldProduce);
+    }
+
+    const group = new THREE.Group();
+    const houseX = house.userData.x;
+    const houseZ = house.userData.z;
+    const houseWidth = house.userData.width || 4;
+
+    // Position in grid next to house
+    const col = produceCount % 5;
+    const row = Math.floor(produceCount / 5);
+    const spacing = 0.5;
+    const baseX = houseX + houseWidth / 2 + 1.5 + col * spacing;
+    const baseZ = houseZ - 1 + row * spacing;
+    const baseY = getHeightAt(baseX, baseZ);
+
+    // Create produce based on field type
+    switch (fieldType) {
+        case 'orchard': {
+            // Pile of fruits (apples/oranges)
+            for (let i = 0; i < 3; i++) {
+                const fruitGeo = new THREE.SphereGeometry(0.1, 6, 4);
+                const color = Math.random() > 0.5 ? 0xff6b35 : 0xc62828;
+                const fruitMat = new THREE.MeshLambertMaterial({ color });
+                const fruit = new THREE.Mesh(fruitGeo, fruitMat);
+                fruit.position.set(
+                    (Math.random() - 0.5) * 0.15,
+                    0.1 + i * 0.08,
+                    (Math.random() - 0.5) * 0.15
+                );
+                fruit.castShadow = true;
+                group.add(fruit);
+            }
+            break;
+        }
+        case 'vineyard': {
+            // Bunch of grapes
+            for (let i = 0; i < 5; i++) {
+                const grapeGeo = new THREE.SphereGeometry(0.06, 5, 4);
+                const grapeMat = new THREE.MeshLambertMaterial({ color: 0x6a1b9a });
+                const grape = new THREE.Mesh(grapeGeo, grapeMat);
+                grape.position.set(
+                    (Math.random() - 0.5) * 0.12,
+                    0.06 + (Math.random() * 0.1),
+                    (Math.random() - 0.5) * 0.12
+                );
+                grape.castShadow = true;
+                group.add(grape);
+            }
+            break;
+        }
+        case 'wheat': {
+            // Wheat bundle
+            const bundleGeo = new THREE.CylinderGeometry(0.08, 0.12, 0.3, 6);
+            const bundleMat = new THREE.MeshLambertMaterial({ color: 0xffd54f });
+            const bundle = new THREE.Mesh(bundleGeo, bundleMat);
+            bundle.position.y = 0.15;
+            bundle.rotation.z = Math.random() * 0.3;
+            bundle.castShadow = true;
+            group.add(bundle);
+            // Top wheat heads
+            const headGeo = new THREE.ConeGeometry(0.06, 0.12, 5);
+            const head = new THREE.Mesh(headGeo, bundleMat);
+            head.position.y = 0.35;
+            group.add(head);
+            break;
+        }
+        case 'rice': {
+            // Rice sack
+            const sackGeo = new THREE.SphereGeometry(0.12, 6, 5);
+            sackGeo.scale(1, 0.7, 1);
+            const sackMat = new THREE.MeshLambertMaterial({ color: 0xf5f5dc });
+            const sack = new THREE.Mesh(sackGeo, sackMat);
+            sack.position.y = 0.1;
+            sack.castShadow = true;
+            group.add(sack);
+            break;
+        }
+        case 'vegetable':
+        default: {
+            // Vegetables (tomatoes, cabbages)
+            for (let i = 0; i < 2; i++) {
+                const vegGeo = new THREE.SphereGeometry(0.09, 6, 5);
+                const color = Math.random() > 0.5 ? 0x4caf50 : 0xf44336;
+                const vegMat = new THREE.MeshLambertMaterial({ color });
+                const veg = new THREE.Mesh(vegGeo, vegMat);
+                veg.position.set(
+                    (Math.random() - 0.5) * 0.12,
+                    0.09,
+                    (Math.random() - 0.5) * 0.12 + i * 0.1
+                );
+                veg.castShadow = true;
+                group.add(veg);
+            }
+            break;
+        }
+    }
+
+    group.position.set(baseX, baseY, baseZ);
+    scene.add(group);
+    house.userData.produce.push(group);
+
+    return group;
+}
+
 // ==================== AGENT COLLISION SYSTEM ====================
 const AGENT_AVOIDANCE_RADIUS = 6; // Distance to start avoiding obstacles
 const AGENT_SEPARATION_RADIUS = 1.5; // Distance between agents
 const AVOIDANCE_STRENGTH = 2.0;
 const SEPARATION_STRENGTH = 1.5;
 
-function getHouseAvoidance(agentX, agentZ) {
+function getHouseAvoidance(agentX, agentZ, excludeHouse = null) {
     let avoidX = 0;
     let avoidZ = 0;
 
     for (const house of houses) {
+        // Skip the agent's own house when returning home
+        if (excludeHouse && house === excludeHouse) continue;
+
         const hd = house.userData;
         const houseRadius = hd.bounds?.radius || Math.max(hd.width || 4, hd.depth || 4) / 2 + 1;
         const dx = agentX - hd.x;
@@ -283,6 +403,7 @@ function updateStats() {
     const treeCount = document.getElementById('treeCount');
     const animalCount = document.getElementById('animalCount');
     const floraCount = document.getElementById('floraCount');
+    const fieldCount = document.getElementById('fieldCount');
 
     if (houseCount) houseCount.textContent = houses.length;
     if (agentCount) agentCount.textContent = agents.length;
@@ -290,6 +411,7 @@ function updateStats() {
     if (treeCount) treeCount.textContent = trees.length;
     if (animalCount) animalCount.textContent = animals.length;
     if (floraCount) floraCount.textContent = flowers.length + bushes.length;
+    if (fieldCount) fieldCount.textContent = fields.length;
 }
 
 // ==================== UPDATE AGENTS PANEL ====================
@@ -618,8 +740,166 @@ function animate() {
             d.particles.error.stop();
         }
 
-        // Random movement when idle
-        if (d.state === AgentState.IDLE && d.moveTimer > 3 + Math.random() * 4) {
+        // Working in field animation
+        if (d.state === AgentState.WORKING && d.assignedField) {
+            d.fieldWorkTimer += dt;
+            d.workAnimationPhase += dt * 4;
+
+            // Emit work particles
+            d.particles.work.start(agent.position.x, agent.position.y, agent.position.z, 8);
+
+            // Move between work positions periodically
+            if (d.fieldWorkTimer > 2 + Math.random() * 2) {
+                d.fieldWorkTimer = 0;
+                const newPos = getFieldWorkPosition(d.assignedField);
+                d.targetX = newPos.x;
+                d.targetZ = newPos.z;
+            }
+
+            // Work animation: bobbing motion while working
+            const workBob = Math.sin(d.workAnimationPhase) * 0.1;
+            d.head.position.y = 1.4 + workBob;
+
+            // Tool animation: swinging motion (like hoeing)
+            if (d.tool) {
+                const swing = Math.sin(d.workAnimationPhase * 1.5) * 0.6;
+                d.tool.rotation.x = swing;
+            }
+
+            // Arms animation while working
+            if (d.arms && d.arms.length >= 2) {
+                const armSwing = Math.sin(d.workAnimationPhase * 1.5) * 0.3;
+                d.arms[1].rotation.x = armSwing;  // Right arm follows tool
+            }
+        } else {
+            d.particles.work.stop();
+            // Reset tool position when not working (except during harvesting)
+            if (d.tool && d.state !== AgentState.HARVESTING) {
+                d.tool.rotation.x = 0;
+            }
+            if (d.arms && d.state !== AgentState.HARVESTING) {
+                d.arms.forEach(arm => arm.rotation.x = 0);
+            }
+        }
+
+        // Harvesting loop for mature fields
+        if (d.state === AgentState.HARVESTING && d.harvestField) {
+            const field = d.harvestField;
+            // Use agent's house instead of hardcoded HQ
+            const homePos = d.house ? { x: d.house.userData.x, z: d.house.userData.z } : { x: -35, z: 0 };
+
+            d.harvestTimer += dt;
+
+            // Update carry mesh visibility
+            if (d.carryMesh) {
+                d.carryMesh.visible = d.carrying;
+            }
+
+            // Distance to current target
+            const distToTarget = Math.hypot(agent.position.x - d.targetX, agent.position.z - d.targetZ);
+
+            switch (d.harvestPhase) {
+                case 'going_to_field': {
+                    // Set target once when entering phase
+                    if (!d.harvestTargetSet) {
+                        const workPos = getFieldWorkPosition(field);
+                        d.targetX = workPos.x;
+                        d.targetZ = workPos.z;
+                        d.harvestTargetSet = true;
+                        d.collectDuration = 2 + Math.random() * 4;
+                    }
+
+                    // Recalculate distance to field target
+                    const distToField = Math.hypot(agent.position.x - d.targetX, agent.position.z - d.targetZ);
+
+                    // Check if arrived at field
+                    if (distToField < 1.5) {
+                        d.harvestPhase = 'collecting';
+                        d.harvestTimer = 0;
+                        d.workAnimationPhase = 0;
+                        d.harvestTargetSet = false;
+                    }
+                    break;
+                }
+
+                case 'collecting': {
+                    // Collect fruits (random duration set above)
+                    d.workAnimationPhase += dt * 4;
+
+                    // Work animation
+                    const workBob = Math.sin(d.workAnimationPhase) * 0.1;
+                    d.head.position.y = 1.4 + workBob;
+                    if (d.tool) d.tool.rotation.x = Math.sin(d.workAnimationPhase * 1.5) * 0.6;
+                    if (d.arms && d.arms.length >= 2) {
+                        d.arms[1].rotation.x = Math.sin(d.workAnimationPhase * 1.5) * 0.3;
+                    }
+
+                    // Emit work particles
+                    d.particles.work.start(agent.position.x, agent.position.y, agent.position.z, 8);
+
+                    if (d.harvestTimer > d.collectDuration) {
+                        console.log(`[HARVEST] Agent ${d.id} finished collecting, now returning. House: ${d.house ? 'yes' : 'NO!'}`);
+                        d.harvestPhase = 'returning';
+                        d.carrying = true;
+                        d.harvestTimer = 0;
+                        d.harvestTargetSet = false;
+                        d.particles.work.stop();
+                    }
+                    break;
+                }
+
+                case 'returning': {
+                    // Set target once when entering phase
+                    if (!d.harvestTargetSet) {
+                        // Target the side of the house where crates are placed
+                        const houseWidth = d.house?.userData?.width || 4;
+                        const houseDepth = d.house?.userData?.depth || 4;
+                        // Go to the right side of the house (where crates stack)
+                        d.targetX = homePos.x + houseWidth / 2 + 2 + Math.random();
+                        d.targetZ = homePos.z + (Math.random() - 0.5) * 2;
+                        d.harvestTargetSet = true;
+                        d.unloadDuration = 0.5 + Math.random() * 1.5;
+                        console.log(`[HARVEST] Agent ${d.id} returning to house side at (${d.targetX.toFixed(1)}, ${d.targetZ.toFixed(1)})`);
+                    }
+
+                    // Recalculate distance to NEW target (house)
+                    const distToHome = Math.hypot(agent.position.x - d.targetX, agent.position.z - d.targetZ);
+
+                    // Check if arrived at home
+                    if (distToHome < 3) {
+                        console.log(`[HARVEST] Agent ${d.id} arrived at home, dist: ${distToHome.toFixed(2)}`);
+                        d.harvestPhase = 'unloading';
+                        d.harvestTimer = 0;
+                        d.harvestTargetSet = false;
+                    }
+                    break;
+                }
+
+                case 'unloading': {
+                    // Unload (random duration set above)
+                    if (d.harvestTimer > d.unloadDuration) {
+                        // Create produce at the house
+                        if (d.house && field) {
+                            const fieldType = field.userData.type || 'vegetable';
+                            createHarvestProduce(d.house, fieldType);
+                        }
+                        d.carrying = false;
+                        d.harvestPhase = 'going_to_field';
+                        d.harvestTimer = 0;
+                        d.harvestTargetSet = false;
+                    }
+                    break;
+                }
+            }
+        } else {
+            // Reset carry mesh when not harvesting
+            if (d.carryMesh) {
+                d.carryMesh.visible = false;
+            }
+        }
+
+        // Random movement when idle (and not working in a field and not harvesting)
+        if (d.state === AgentState.IDLE && !d.assignedField && !d.harvestField && d.moveTimer > 3 + Math.random() * 4) {
             d.moveTimer = 0;
             const house = d.house;
             const range = 8;
@@ -637,8 +917,10 @@ function animate() {
             const dirX = dx / dist;
             const dirZ = dz / dist;
 
-            // Get avoidance forces
-            const avoidance = getHouseAvoidance(agent.position.x, agent.position.z);
+            // Get avoidance forces (exclude own house when returning home)
+            const isReturningHome = d.state === AgentState.HARVESTING &&
+                                   (d.harvestPhase === 'returning' || d.harvestPhase === 'unloading');
+            const avoidance = getHouseAvoidance(agent.position.x, agent.position.z, isReturningHome ? d.house : null);
             const separation = getAgentSeparation(agent);
 
             // Combine forces: target direction + avoidance + separation
@@ -697,18 +979,243 @@ function addHouse() {
         addSmokeToHouse(smokeSystem, house);
     }
     updateStats();
+    return house;
 }
 
 function addAgent() {
     const hq = headquarters;
     if (!hq) return;
-    createAgent(scene, hq);
+    const agent = createAgent(scene, hq);
     updateStats();
+    return agent;
+}
+
+function addField(fieldType = FieldTypes.VEGETABLE, x = null, z = null, taskName = null) {
+    // createField will auto-position from farm if x,z are null
+    const field = createField(scene, fieldType, x, z);
+    if (!field) {
+        console.warn('Could not create field (collision or other issue)');
+        return null;
+    }
+
+    // Auto-create an agent for this field
+    const agent = createAgent(scene, headquarters);
+    const task = taskName || `Cultivate ${fieldType}`;
+
+    // Assign agent to field and start working
+    assignAgentToField(agent, field, task);
+    agent.userData.state = AgentState.WORKING;
+    agent.userData.stateTimer = 0;
+
+    console.log(`Created field #${field.userData.id} with agent #${agent.userData.id}`);
+
+    updateStats();
+    return { field, agent };
+}
+
+function startFieldTask(agentId, fieldId, taskName) {
+    const agent = agents.find(a => a.userData.id === agentId) || agents[agentId - 1];
+    const field = fields.find(f => f.userData.id === fieldId) || fields[fieldId - 1];
+
+    if (!agent || !field) {
+        console.error('Agent or field not found:', agentId, fieldId);
+        return null;
+    }
+
+    // Assign agent to field and start working
+    assignAgentToField(agent, field, taskName);
+    agent.userData.state = AgentState.WORKING;
+    agent.userData.stateTimer = 0;  // Don't auto-reset state
+
+    return { agent, field };
+}
+
+function setFieldProgress(fieldId, progress, agentId = null) {
+    console.log(`setFieldProgress called: fieldId=${fieldId}, progress=${progress}, agentId=${agentId}`);
+    console.log(`Available fields:`, fields.map(f => f.userData.id));
+    console.log(`Available agents:`, agents.map(a => a.userData.id));
+
+    const field = fields.find(f => f.userData.id === fieldId) || fields[fieldId - 1];
+    if (!field) {
+        console.error('Field not found:', fieldId);
+        return;
+    }
+    console.log(`Found field:`, field.userData.id);
+    updateFieldProgress(field, progress);
+
+    // If progress is 100%, start harvesting loop
+    if (progress >= 100) {
+        console.log(`Progress 100%, looking for agent. field.assignedAgent:`, field.userData.assignedAgent);
+        // Try to find agent: first from field, then by agentId
+        let agent = field.userData.assignedAgent;
+        if (!agent && agentId) {
+            console.log(`Searching agent by ID: ${agentId}`);
+            agent = agents.find(a => a.userData.id === agentId) || agents[agentId - 1];
+            console.log(`Found agent:`, agent ? agent.userData.id : 'null');
+            if (agent) {
+                // Assign agent to field if not already
+                field.userData.assignedAgent = agent;
+                agent.userData.assignedField = field;
+            }
+        }
+        if (agent) {
+            console.log(`Starting harvesting for agent ${agent.userData.id}`);
+            startHarvesting(agent, field);
+        } else {
+            console.error('No agent found for harvesting!');
+        }
+    }
+}
+
+// Start harvesting loop for an agent on a mature field
+function startHarvesting(agent, field) {
+    const d = agent.userData;
+    d.state = AgentState.HARVESTING;
+    d.harvestField = field;
+    d.harvestPhase = 'going_to_field';
+    d.harvestTimer = 0;
+    d.carrying = false;
+    d.stateTimer = 0;  // Don't auto-reset state
+
+    // Keep agent assigned to field
+    d.assignedField = field;
+}
+
+// Stop harvesting and release agent
+function stopHarvesting(agentId) {
+    const agent = agents.find(a => a.userData.id === agentId) || agents[agentId - 1];
+    if (!agent) return;
+
+    const d = agent.userData;
+    d.state = AgentState.SUCCESS;
+    d.stateTimer = 3;
+    d.harvestField = null;
+    d.harvestPhase = 'idle';
+    d.harvestTimer = 0;
+    d.carrying = false;
+
+    if (d.assignedField) {
+        releaseAgentFromField(agent);
+    }
+}
+
+function endFieldTask(agentId, success = true) {
+    const agent = agents.find(a => a.userData.id === agentId) || agents[agentId - 1];
+    if (!agent) return;
+
+    if (agent.userData.assignedField) {
+        releaseAgentFromField(agent);
+    }
+
+    agent.userData.state = success ? AgentState.SUCCESS : AgentState.ERROR;
+    agent.userData.stateTimer = 3;
+}
+
+// Store signs for raycasting
+const fieldSigns = [];
+
+// Create a sign in front of a field with summary text (shown on hover)
+function createFieldSign(fieldId, summaryText) {
+    console.log('createFieldSign called:', fieldId, summaryText);
+    console.log('Available fields:', fields.map(f => f.userData.id));
+
+    const field = fields.find(f => f.userData.id === fieldId) || fields[fieldId - 1];
+    if (!field) {
+        console.error('Field not found for sign:', fieldId);
+        return;
+    }
+    console.log('Found field at:', field.userData.x, field.userData.z);
+
+    // Position in front of the field (offset in Z)
+    const signX = field.userData.x;
+    const signZ = field.userData.z + 4;  // In front of field
+
+    // Create sign post (wooden pole)
+    const postGeometry = new THREE.CylinderGeometry(0.08, 0.1, 1.2, 8);
+    const postMaterial = new THREE.MeshLambertMaterial({ color: 0x8B4513 });  // Brown
+    const post = new THREE.Mesh(postGeometry, postMaterial);
+    post.position.set(signX, 0.6, signZ);
+    post.castShadow = true;
+
+    // Create sign board
+    const boardGeometry = new THREE.BoxGeometry(0.8, 0.5, 0.08);
+    const boardMaterial = new THREE.MeshLambertMaterial({ color: 0xDEB887 });  // Burlywood
+    const board = new THREE.Mesh(boardGeometry, boardMaterial);
+    board.position.set(0, 0.45, 0);
+    board.castShadow = true;
+    post.add(board);
+
+    // Create text on the board with checkmark and first words
+    const textCanvas = document.createElement('canvas');
+    textCanvas.width = 256;
+    textCanvas.height = 128;
+    const ctx = textCanvas.getContext('2d');
+
+    // Background
+    ctx.fillStyle = '#DEB887';
+    ctx.fillRect(0, 0, 256, 128);
+
+    // Checkmark
+    ctx.fillStyle = '#228B22';
+    ctx.font = 'bold 40px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('✓', 128, 45);
+
+    // First words of summary (truncated)
+    const shortText = (summaryText || 'Done').substring(0, 20) + (summaryText && summaryText.length > 20 ? '...' : '');
+    ctx.fillStyle = '#4a3728';
+    ctx.font = 'bold 18px Arial';
+    ctx.fillText(shortText, 128, 90);
+
+    const textTexture = new THREE.CanvasTexture(textCanvas);
+    const textGeometry = new THREE.PlaneGeometry(0.75, 0.4);
+    const textMaterial = new THREE.MeshBasicMaterial({ map: textTexture });
+    const textMesh = new THREE.Mesh(textGeometry, textMaterial);
+    textMesh.position.set(0, 0, 0.05);
+    board.add(textMesh);
+
+    // Store summary for hover tooltip
+    post.userData = {
+        isFieldSign: true,
+        fieldId: fieldId,
+        summary: summaryText || 'Task completed',
+        field: field
+    };
+
+    scene.add(post);
+    fieldSigns.push(post);
+
+    console.log(`Created sign for field #${fieldId}: "${summaryText}"`);
+    return post;
+}
+
+// Debug function: mature all fields to 100%
+function matureAllFields() {
+    fields.forEach(field => {
+        setFieldProgress(field.userData.id, 100);
+    });
+    console.log(`Matured ${fields.length} fields to 100%`);
 }
 
 // Expose to window (for UI buttons and MCP API)
 window.addHouse = addHouse;
 window.addAgent = addAgent;
+window.addField = addField;
+window.startFieldTask = startFieldTask;
+window.setFieldProgress = setFieldProgress;
+window.endFieldTask = endFieldTask;
+window.matureAllFields = matureAllFields;
+window.startHarvesting = startHarvesting;
+window.stopHarvesting = stopHarvesting;
+window.createFieldSign = createFieldSign;
+window.showAgentText = showAgentText;
+window.hideAgentText = hideAgentText;
+window.agents = agents;
+
+// Toggle UI visibility
+window.toggleUI = function() {
+    document.body.classList.toggle('ui-hidden');
+};
 
 // ==================== RESIZE ====================
 window.addEventListener('resize', () => {
@@ -716,6 +1223,64 @@ window.addEventListener('resize', () => {
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
     composer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ==================== HOVER TOOLTIP FOR SIGNS ====================
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+
+// Create tooltip element
+const tooltip = document.createElement('div');
+tooltip.id = 'sign-tooltip';
+tooltip.style.cssText = `
+    position: fixed;
+    padding: 8px 12px;
+    background: rgba(0, 0, 0, 0.85);
+    color: #fff;
+    border-radius: 6px;
+    font-size: 13px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s;
+    max-width: 300px;
+    z-index: 1000;
+    border: 1px solid rgba(255,255,255,0.2);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+`;
+document.body.appendChild(tooltip);
+
+window.addEventListener('mousemove', (event) => {
+    mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+    mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+    raycaster.setFromCamera(mouse, camera);
+
+    // Check intersections with signs
+    if (fieldSigns.length > 0) {
+        const intersects = raycaster.intersectObjects(fieldSigns, true);
+
+        if (intersects.length > 0) {
+            // Find the sign (parent object with userData)
+            let sign = intersects[0].object;
+            while (sign && !sign.userData?.isFieldSign) {
+                sign = sign.parent;
+            }
+
+            if (sign && sign.userData?.summary) {
+                tooltip.textContent = sign.userData.summary;
+                tooltip.style.opacity = '1';
+                tooltip.style.left = (event.clientX + 15) + 'px';
+                tooltip.style.top = (event.clientY + 15) + 'px';
+                document.body.style.cursor = 'pointer';
+                return;
+            }
+        }
+    }
+
+    // Hide tooltip if not hovering sign
+    tooltip.style.opacity = '0';
+    document.body.style.cursor = 'default';
 });
 
 // ==================== INITIAL SCENE ====================
@@ -739,9 +1304,9 @@ spawnVegetation(scene);
 createSmallStones(scene);
 createDirtPatches(scene, getRandomPositionInFarm);
 
-// Initial trees (scenery)
+// Initial trees (scenery) - use larger spacing to prevent trees from clumping
 for (let i = 0; i < 8; i++) {
-    const pos = findPosition(4);
+    const pos = findPosition(12);  // Minimum 12 units between trees (was 4)
     createTree(scene, pos.x, pos.z);
 }
 
@@ -808,15 +1373,95 @@ function handleMCPCommand(type, payload) {
     console.log('MCP Command:', type, payload);
 
     switch (type) {
-        case 'create_house':
-            addHouse();
+        case 'create_house': {
+            const newHouse = addHouse();
+            if (newHouse && payload.id) {
+                newHouse.userData.id = payload.id;
+            }
             break;
+        }
 
-        case 'create_agent':
-            addAgent();
+        case 'create_agent': {
+            // Find the house for this agent (use houseId from payload, or last created house)
+            let agentHouse = headquarters;
+            if (payload.houseId) {
+                const foundHouse = houses.find(h => h.userData.id === payload.houseId);
+                if (foundHouse) {
+                    agentHouse = foundHouse;
+                } else if (houses.length > 0) {
+                    // Use the most recently created house
+                    agentHouse = houses[houses.length - 1];
+                }
+            } else if (houses.length > 0) {
+                // Use the most recently created house if no houseId specified
+                agentHouse = houses[houses.length - 1];
+            }
+
+            const newAgent = createAgent(scene, agentHouse);
+            if (newAgent && payload.id) {
+                // Use server's ID for synchronization
+                newAgent.userData.id = payload.id;
+                newAgent.userData.name = payload.name || newAgent.userData.name;
+            }
+            updateStats();
             break;
+        }
 
-        case 'set_agent_state':
+        case 'create_field': {
+            // Use createField directly (not addField) to avoid auto-creating agents
+            // The MCP server will handle agent creation separately
+            const fieldType = payload.type || payload.fieldType || FieldTypes.VEGETABLE;
+            const newField = createField(scene, fieldType, payload.x, payload.z);
+            if (newField) {
+                if (payload.id) {
+                    newField.userData.id = payload.id;
+                }
+                console.log(`MCP created field #${newField.userData.id} type ${fieldType}`);
+                updateStats();
+            }
+            break;
+        }
+
+        case 'start_task': {
+            // Find agent and field by server IDs
+            const taskAgent = agents.find(a => a.userData.id === payload.agentId);
+            const taskField = payload.fieldId ? fields.find(f => f.userData.id === payload.fieldId) : null;
+
+            if (taskAgent) {
+                if (taskField) {
+                    // Assign agent to field
+                    assignAgentToField(taskAgent, taskField, payload.taskName);
+                    taskAgent.userData.state = AgentState.WORKING;
+                    taskAgent.userData.stateTimer = 0;
+                    console.log(`Agent ${payload.agentId} assigned to field ${payload.fieldId}`);
+                } else {
+                    // Working without specific field
+                    taskAgent.userData.state = AgentState.WORKING;
+                    taskAgent.userData.currentTask = payload.taskName;
+                    taskAgent.userData.stateTimer = 0;
+                }
+            } else {
+                console.warn('Agent not found for start_task:', payload.agentId);
+            }
+            break;
+        }
+
+        case 'end_task': {
+            endFieldTask(payload.agentId, payload.success !== false);
+            break;
+        }
+
+        case 'set_field_progress': {
+            setFieldProgress(payload.fieldId, payload.progress, payload.agentId);
+            break;
+        }
+
+        case 'create_field_sign': {
+            createFieldSign(payload.fieldId, payload.summary);
+            break;
+        }
+
+        case 'set_agent_state': {
             const agent = agents.find(a => a.userData.id === payload.agentId) || agents[payload.agentId - 1];
             if (agent) {
                 agent.userData.state = payload.state;
@@ -826,6 +1471,7 @@ function handleMCPCommand(type, payload) {
                 agent.userData.stateTimer = 3;
             }
             break;
+        }
 
         case 'create_file':
             if (payload.agentId) {
@@ -845,6 +1491,11 @@ function handleMCPCommand(type, payload) {
                 if (targetAgent) {
                     controls.target.set(targetAgent.position.x, targetAgent.position.y, targetAgent.position.z);
                 }
+            } else if (payload.fieldId) {
+                const targetField = fields.find(f => f.userData.id === payload.fieldId) || fields[payload.fieldId - 1];
+                if (targetField) {
+                    controls.target.set(targetField.position.x, targetField.position.y, targetField.position.z);
+                }
             } else if (payload.x !== undefined && payload.z !== undefined) {
                 controls.target.set(payload.x, 0, payload.z);
             }
@@ -853,6 +1504,27 @@ function handleMCPCommand(type, payload) {
         case 'sync':
             console.log('Received state sync:', payload);
             break;
+
+        case 'show_agent_text': {
+            // Find agent by server ID (number) or by index
+            const textAgent = agents.find(a => a.userData.id === payload.agentId);
+            if (textAgent) {
+                showAgentText(textAgent, payload.text);
+                console.log(`Showing text "${payload.text}" for agent`, textAgent.userData.id);
+            } else {
+                console.warn('Agent not found for show_agent_text:', payload.agentId);
+            }
+            break;
+        }
+
+        case 'hide_agent_text': {
+            const textAgent = agents.find(a => a.userData.id === payload.agentId);
+            if (textAgent) {
+                hideAgentText(textAgent);
+                console.log('Hiding text for agent', textAgent.userData.id);
+            }
+            break;
+        }
     }
 
     updateStats();

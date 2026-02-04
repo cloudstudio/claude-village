@@ -1,9 +1,9 @@
 {
   "mcpServers": {
-    "agent-village": {
+    "village": {
       "command": "node",
-      "args": ["server/mcp.js"],
-      "env": {}
+      "args": ["/Users/cloudstudio/Sites/jabon/server/mcp.js"],
+      "cwd": "/Users/cloudstudio/Sites/jabon/server"
     }
   }
 }
