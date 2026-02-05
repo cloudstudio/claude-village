@@ -227,7 +227,7 @@ export function createAgent(scene, house) {
         currentTask: null,
         targetX: group.position.x,
         targetZ: group.position.z,
-        speed: (0.04 + Math.random() * 0.02) * 2,  // 100% faster
+        speed: (0.04 + Math.random() * 0.02) * 3,  // 200% faster
         moveTimer: Math.random() * 3,
         walkCycle: 0,
         bobCycle: 0,

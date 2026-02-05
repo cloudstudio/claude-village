@@ -101,6 +101,49 @@ village_clear_board()
 
 Add `?debug=true` to URL to show UI panel with stats.
 
+## Integration
+
+Add this to your `CLAUDE.md` or `.claude/rules/village.md` to enable automatic task tracking.
+
+**Pro tip**: Add these instructions to each agent or skill for best results - Claude will automatically track all tasks visually.
+
+```markdown
+# Agent Village Integration
+
+When working on features or multi-step tasks, use the Village MCP tools to track progress visually.
+
+## Workflow
+
+1. **Start a new feature**: Use `village_create_board` with the feature title and list of tasks
+2. **Before starting each task**: Use `village_start_task` with the task name
+3. **After completing each task**: Use `village_complete_task` with a summary of what was done
+
+## Example
+
+\`\`\`javascript
+// Starting a new feature
+village_create_board({
+  title: "User Authentication",
+  tasks: ["Design flow", "Implement JWT", "Add OAuth", "Write tests"]
+})
+
+// When starting work on a task
+village_start_task({ task: "Design" })
+
+// When done with a task (ALWAYS include summary)
+village_complete_task({
+  task: "Design",
+  summary: "Created login/signup flows, added password reset diagram"
+})
+\`\`\`
+
+## Rules
+
+- Always provide summaries when completing tasks
+- Use `village_get_status` to check current progress
+- Use `village_clear_board` when starting a completely new feature
+```
+
 ## License
 
 MIT

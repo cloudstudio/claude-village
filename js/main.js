@@ -806,7 +806,7 @@ function animate() {
                         d.targetX = workPos.x;
                         d.targetZ = workPos.z;
                         d.harvestTargetSet = true;
-                        d.collectDuration = 2 + Math.random() * 4;
+                        d.collectDuration = 15 + Math.random() * 20;
                     }
 
                     // Recalculate distance to field target
@@ -1322,10 +1322,13 @@ animate();
 updateStats();
 
 // ==================== DEBUG MODE ====================
-// Hide UI by default, show with ?debug=true in URL
+// Hide UI completely by default, show with ?debug=true in URL
 const DEBUG_MODE = new URLSearchParams(window.location.search).get('debug') === 'true';
 if (!DEBUG_MODE) {
     document.body.classList.add('ui-hidden');
+    // Also hide the open button
+    const openBtn = document.getElementById('open-panel');
+    if (openBtn) openBtn.style.display = 'none';
 }
 
 // ==================== MCP SERVER CONNECTION ====================
