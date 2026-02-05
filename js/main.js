@@ -1321,6 +1321,13 @@ animate();
 // Update stats
 updateStats();
 
+// ==================== DEBUG MODE ====================
+// Hide UI by default, show with ?debug=true in URL
+const DEBUG_MODE = new URLSearchParams(window.location.search).get('debug') === 'true';
+if (!DEBUG_MODE) {
+    document.body.classList.add('ui-hidden');
+}
+
 // ==================== MCP SERVER CONNECTION ====================
 const MCP_WS_URL = 'ws://localhost:8765';
 let mcpSocket = null;
